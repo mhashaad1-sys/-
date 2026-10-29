@@ -1,0 +1,10 @@
+node_modules/
+out/
+dist/
+release/
+*.db
+*.db-*
+# نسخ ملفات الشغل — ممنوع ترفع على GitHub
+samples/
+imports/
+.env*
