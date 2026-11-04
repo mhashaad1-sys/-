@@ -87,8 +87,22 @@ async function save(store, obj) {
   await DB.put(store, obj);
   const i = D[store].findIndex((x) => x.id === obj.id);
   if (i >= 0) D[store][i] = obj; else D[store].push(obj);
+  Cloud.write(store, obj);
 }
-async function remove(store, id) { await DB.del(store, id); D[store] = D[store].filter((x) => x.id !== id); }
+async function remove(store, id) { await DB.del(store, id); D[store] = D[store].filter((x) => x.id !== id); Cloud.del(store, id); }
+
+// الصلاحيات: finance (الفلوس)، staff (العاملين)، editChildren، manage (الإعدادات والمستخدمين)
+function can(p) {
+  const r = Cloud.effRole();
+  if (!r || r === 'admin') return true;
+  return ({ accountant: ['finance', 'staff', 'editChildren'], teacher: [] }[r] || []).includes(p);
+}
+let pendingRender = false;
+function softRender() {
+  const busy = !$('#modal').classList.contains('hidden') || (document.activeElement && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName) && document.activeElement.id !== '');
+  if (busy) { pendingRender = true; return; }
+  pendingRender = false; render();
+}
 async function saveSettings(patch) { await save('settings', { ...settings(), ...patch, id: 'main' }); }
 
 const child = (id) => D.children.find((c) => c.id === id);
@@ -151,7 +165,12 @@ window.addEventListener('popstate', () => {
 
 function render() {
   const top = state.stack[state.stack.length - 1];
-  document.querySelectorAll('.bottom-nav button').forEach((b) => b.classList.toggle('active', b.dataset.tab === state.tab));
+  if ((state.tab === 'finance' && !can('finance')) || (state.tab === 'staff' && !can('staff'))) state.tab = 'home';
+  document.querySelectorAll('.bottom-nav button').forEach((b) => {
+    b.classList.toggle('active', b.dataset.tab === state.tab);
+    b.classList.toggle('hidden', (b.dataset.tab === 'finance' && !can('finance')) || (b.dataset.tab === 'staff' && !can('staff')));
+  });
+  renderSync(); renderGate();
   $('#backBtn').classList.toggle('hidden', !top);
   $('#nurseryName').textContent = settings().name;
   let html, title = TITLES[state.tab];
@@ -192,25 +211,26 @@ function viewHome() {
   </div>
   <div class="quick">
     <button data-action="goAttendance"><span>✅</span>الحضور</button>
-    <button data-action="addPayment"><span>💵</span>تحصيل</button>
-    <button data-action="addExpense"><span>🧾</span>مصروف</button>
+    ${can('finance') ? `<button data-action="addPayment"><span>💵</span>تحصيل</button>
+    <button data-action="addExpense"><span>🧾</span>مصروف</button>` : `<button data-action="addNote"><span>📝</span>ملاحظة</button>
+    <button data-action="goSchedule"><span>📅</span>الجدول</button>`}
     <button data-action="goMessages"><span>💬</span>رسائل</button>
   </div>
   <div class="stats">
     <div class="stat purple"><div class="label">الأطفال المسجلين</div><div class="value">${num(kids.length)}</div></div>
     <div class="stat blue"><div class="label">حضور الأطفال اليوم</div><div class="value">${num(present)} / ${num(kids.length)}</div>${marked < kids.length && kids.length ? `<div class="label">لم يُسجَّل: ${num(kids.length - marked)}</div>` : ''}</div>
-    <div class="stat green"><div class="label">إيرادات ${monthLabel(m)}</div><div class="value">${money(inc)}</div></div>
+    ${can('finance') ? `<div class="stat green"><div class="label">إيرادات ${monthLabel(m)}</div><div class="value">${money(inc)}</div></div>
     <div class="stat red"><div class="label">مصروفات ${monthLabel(m)}</div><div class="value">${money(exp)}</div></div>
     <div class="stat ${inc - exp >= 0 ? 'green' : 'red'}"><div class="label">صافي الربح هذا الشهر</div><div class="value">${money(inc - exp)}</div></div>
-    <div class="stat red"><div class="label">إجمالي المتأخرات</div><div class="value">${money(totalDue)}</div></div>
+    <div class="stat red"><div class="label">إجمالي المتأخرات</div><div class="value">${money(totalDue)}</div></div>` : ''}
     ${staff.length ? `<div class="stat blue"><div class="label">العاملين الحاضرين</div><div class="value">${num(staffPresent)} / ${num(staff.length)}</div></div>` : ''}
-    <div class="stat green"><div class="label">المتوقع تحصيله شهريًا</div><div class="value">${money(sum(kids, (c) => c.monthlyFee))}</div></div>
+    ${can('finance') ? `<div class="stat green"><div class="label">المتوقع تحصيله شهريًا</div><div class="value">${money(sum(kids, (c) => c.monthlyFee))}</div></div>` : ''}
   </div>
 
   ${todaySchedule()}
 
-  <div class="section-title"><h3>لم يدفعوا اشتراك ${monthLabel(m)} (${num(unpaid.length)})</h3>${unpaid.length ? '<button class="btn small" data-action="goDues">عرض الكل</button>' : ''}</div>
-  <div class="list">${unpaid.slice(0, 5).map((c) => childRow(c, `<span class="badge ${monthStatus(c, m).cls}">${money(monthStatus(c, m).remaining)}</span>`)).join('') || '<div class="empty">كل الأطفال دفعوا اشتراك الشهر 🎉</div>'}</div>
+  ${can('finance') ? `<div class="section-title"><h3>لم يدفعوا اشتراك ${monthLabel(m)} (${num(unpaid.length)})</h3>${unpaid.length ? '<button class="btn small" data-action="goDues">عرض الكل</button>' : ''}</div>
+  <div class="list">${unpaid.slice(0, 5).map((c) => childRow(c, `<span class="badge ${monthStatus(c, m).cls}">${money(monthStatus(c, m).remaining)}</span>`)).join('') || '<div class="empty">كل الأطفال دفعوا اشتراك الشهر 🎉</div>'}</div>` : ''}
 
   ${bdays.length ? `<div class="section-title"><h3>🎂 أعياد ميلاد هذا الشهر</h3></div>
   <div class="list">${bdays.map((c) => childRow(c, `<span class="badge blue">${num(+c.birthDate.slice(8))} ${shortMonth(m)}</span>`)).join('')}</div>` : ''}
@@ -218,7 +238,7 @@ function viewHome() {
   ${recentNotes.length ? `<div class="section-title"><h3>📝 آخر الملاحظات</h3></div>
   <div class="list">${recentNotes.map(noteRow).join('')}</div>` : ''}
 
-  ${!D.children.length ? `<div class="card"><h3>أهلاً بك 👋</h3><p>ابدأ بإضافة الفصول من <b>المزيد ← الفصول</b>، ثم أضف الأطفال أو استوردهم من ملف إكسيل.</p>
+  ${!D.children.length && can('manage') ? `<div class="card"><h3>أهلاً بك 👋</h3><p>ابدأ بإضافة الفصول من <b>المزيد ← الفصول</b>، ثم أضف الأطفال أو استوردهم من ملف إكسيل.</p>
   <div class="btn-row"><button class="btn primary" data-action="addChild">إضافة طفل</button><button class="btn" data-action="goImport">استيراد من إكسيل</button></div></div>` : ''}`;
 }
 
@@ -252,10 +272,10 @@ function viewChildren() {
   <div class="toolbar">
     <select id="childClass">${classOpts(state.childClass)}</select>
     <select id="childStatus"><option value="active" ${state.childStatus === 'active' ? 'selected' : ''}>المسجلين حاليًا</option><option value="left" ${state.childStatus === 'left' ? 'selected' : ''}>تركوا الحضانة</option></select>
-    <button class="btn primary" data-action="addChild">+ طفل</button>
+    ${can('editChildren') ? '<button class="btn primary" data-action="addChild">+ طفل</button>' : ''}
   </div>
-  <div class="list" id="childList">${list.map((c) => { const s = monthStatus(c, m); return childRow(c, c.active === false ? '<span class="badge gray">غير مسجل</span>' : `<span class="badge ${s.cls}">${s.label}</span>`); }).join('') || '<div class="empty">لا يوجد أطفال</div>'}</div>
-  <p class="sub" style="text-align:center;color:var(--muted);font-size:12px">العدد: ${num(list.length)} · <a href="#" data-action="goImport">استيراد من إكسيل</a></p>`;
+  <div class="list" id="childList">${list.map((c) => { const s = monthStatus(c, m); return childRow(c, c.active === false ? '<span class="badge gray">غير مسجل</span>' : can('finance') ? `<span class="badge ${s.cls}">${s.label}</span>` : ''); }).join('') || '<div class="empty">لا يوجد أطفال</div>'}</div>
+  <p class="sub" style="text-align:center;color:var(--muted);font-size:12px">العدد: ${num(list.length)}${can('manage') ? ' · <a href="#" data-action="goImport">استيراد من إكسيل</a>' : ''}</p>`;
 }
 
 function viewChildProfile({ id }) {
@@ -273,17 +293,17 @@ function viewChildProfile({ id }) {
       <div class="profile-head">${avatar(c, true)}<div>
         <h2>${esc(c.name)}</h2>
         <div class="sub">${esc(className(c.classId))}${c.gender ? ' · ' + esc(c.gender) : ''}${c.birthDate ? ' · ' + age(c.birthDate) : ''}</div>
-        <div style="margin-top:6px">${c.active === false ? '<span class="badge gray">ترك الحضانة</span>' : `<span class="badge ${s.cls}">اشتراك الشهر: ${s.label}</span>`} ${bal ? `<span class="badge red">متأخرات: ${money(bal)}</span>` : ''}</div>
+        <div style="margin-top:6px">${c.active === false ? '<span class="badge gray">ترك الحضانة</span>' : can('finance') ? `<span class="badge ${s.cls}">اشتراك الشهر: ${s.label}</span>` : ''} ${bal && can('finance') ? `<span class="badge red">متأخرات: ${money(bal)}</span>` : ''}</div>
       </div></div>
       ${c.medical ? `<div class="alert">⚠️ ملاحظات صحية / حساسية: ${esc(c.medical)}</div>` : ''}
-      ${!c.phone ? `<div class="alert">📞 مفيش رقم تليفون لولي الأمر — اضغط تعديل وضيفه عشان تقدر تبعت رسايل واتساب.</div>` : ''}
+      ${!c.phone && can('editChildren') ? `<div class="alert">📞 مفيش رقم تليفون لولي الأمر — اضغط تعديل وضيفه عشان تقدر تبعت رسايل واتساب.</div>` : ''}
       <div class="btn-row" style="margin-top:12px">
-        <button class="btn primary small" data-action="addPayment" data-child="${c.id}">💵 تحصيل</button>
+        ${can('finance') ? `<button class="btn primary small" data-action="addPayment" data-child="${c.id}">💵 تحصيل</button>` : ''}
         <button class="btn small" data-action="addNote" data-child="${c.id}">📝 ملاحظة</button>
         ${c.phone ? `<a class="btn small green" href="tel:${esc(c.phone)}">📞 اتصال</a>
         <a class="btn small green" target="_blank" href="${waLink(c.phone, `السلام عليكم ولي أمر ${c.name}، `)}">💬 واتساب</a>` : ''}
-        ${c.phone && (bal || s.remaining) ? `<a class="btn small danger" target="_blank" href="${waLink(c.phone, reminder)}">🔔 تذكير بالمصاريف</a>` : ''}
-        <button class="btn small" data-action="editChild" data-id="${c.id}">✏️ تعديل</button>
+        ${c.phone && (bal || s.remaining) && can('finance') ? `<a class="btn small danger" target="_blank" href="${waLink(c.phone, reminder)}">🔔 تذكير بالمصاريف</a>` : ''}
+        ${can('editChildren') ? `<button class="btn small" data-action="editChild" data-id="${c.id}">✏️ تعديل</button>` : ''}
       </div>
     </div>
 
@@ -292,7 +312,7 @@ function viewChildProfile({ id }) {
       ${kv('ولي الأمر', [c.guardianName, c.guardianRelation && c.guardianName && `(${c.guardianRelation})`].filter(Boolean).join(' '))}
       ${kv('التليفون', c.phone)}${kv('تليفون آخر', c.phone2)}${kv('العنوان', c.address)}
       ${kv('تاريخ الالتحاق', c.enrollDate ? dateLabel(c.enrollDate) : '')}
-      ${kv('الاشتراك الشهري', c.monthlyFee ? money(c.monthlyFee) : '')}
+      ${can('finance') ? kv('الاشتراك الشهري', c.monthlyFee ? money(c.monthlyFee) : '') : ''}
       ${kv('المسموح لهم بالاستلام', c.pickup)}${kv('ملاحظات', c.notes)}
       ${c.active === false ? kv('تاريخ الترك', c.leaveDate ? dateLabel(c.leaveDate) : '') : ''}
     </dl></div>
@@ -303,8 +323,8 @@ function viewChildProfile({ id }) {
       <span class="badge red">غائب: ${num(att.filter((a) => a.status === 'absent').length)}</span></div>
     </div>
 
-    <div class="section-title"><h3>المدفوعات (${num(pays.length)}) · الإجمالي ${money(sum(pays, (p) => p.amount))}</h3></div>
-    <div class="list">${pays.map(paymentRow).join('') || '<div class="empty">لا توجد مدفوعات</div>'}</div>
+    ${can('finance') ? `<div class="section-title"><h3>المدفوعات (${num(pays.length)}) · الإجمالي ${money(sum(pays, (p) => p.amount))}</h3></div>
+    <div class="list">${pays.map(paymentRow).join('') || '<div class="empty">لا توجد مدفوعات</div>'}</div>` : ''}
 
     <div class="section-title"><h3>سجل الملاحظات اليومية</h3><button class="btn small" data-action="addNote" data-child="${c.id}">+ ملاحظة</button></div>
     <div class="list">${notes.map(noteRow).join('') || '<div class="empty">لا توجد ملاحظات</div>'}</div>`,
@@ -593,7 +613,7 @@ function viewMessages() {
       <label class="full">نوع الرسالة<select id="msgTpl">${MESSAGE_TEMPLATES.map(([t], i) => `<option value="${i}" ${i === state.msgTpl ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
       <label class="full">نص الرسالة (اكتب {name} مكان اسم الطفل و {amount} مكان المبلغ)<textarea id="msgText" rows="6">${esc(state.msgText)}</textarea></label>
       <label class="full">إرسال إلى<select id="msgTarget"><option value="all" ${state.msgTarget === 'all' ? 'selected' : ''}>كل أولياء الأمور</option>
-        <option value="unpaid" ${state.msgTarget === 'unpaid' ? 'selected' : ''}>اللي عليهم مصاريف</option>
+        ${can('finance') ? `<option value="unpaid" ${state.msgTarget === 'unpaid' ? 'selected' : ''}>اللي عليهم مصاريف</option>` : ''}
         ${D.classes.map((k) => `<option value="${k.id}" ${state.msgTarget === k.id ? 'selected' : ''}>فصل ${esc(k.name)}</option>`).join('')}</select></label>
     </div></div>
     <p class="sub" style="color:var(--muted)">اضغط "إرسال" جنب كل اسم، هيفتح الواتساب والرسالة جاهزة باسم الطفل. ${noPhone ? `<b style="color:var(--red)">${num(noPhone)} طفل بدون رقم تليفون</b> — ضيف الأرقام من صفحة كل طفل، أو مرة واحدة من ملف إكسيل فيه عمود "اسم الطالب" وعمود "التليفون" (المزيد ← استيراد من إكسيل).` : ''}</p>
@@ -784,6 +804,18 @@ function exportExcel() {
 }
 
 // ================== شاشات أخرى ==================
+function accountCard() {
+  if (!Cloud.ready) return '';
+  if (!Cloud.user) {
+    return `<div class="card sync-card"><h3>☁️ المزامنة بين الموبايلات</h3><p class="sub">سجّل دخول عشان البيانات تتحفظ على السيرفر وتشتغلوا كلكم على نفس البيانات من أكتر من موبايل.</p>
+      <button class="btn primary" data-action="showLogin">🔑 تسجيل الدخول</button></div>`;
+  }
+  return `<div class="card sync-card"><div class="profile-head"><div class="avatar">👤</div><div><div class="title"><b>${esc(Cloud.name || Cloud.email)}</b></div>
+    <div class="sub">${esc(Cloud.email)} · ${esc(ROLES[Cloud.role] || '')}</div><div class="sub">${syncLabel()}</div></div></div>
+    <div class="btn-row" style="margin-top:10px">${can('manage') && Cloud.role ? '<button class="btn small primary" data-action="goMembers">👥 المستخدمين والصلاحيات</button>' : ''}
+    <button class="btn small" data-action="logout">🚪 تسجيل خروج</button></div></div>`;
+}
+
 function viewMore() {
   const items = [
     ['📅', 'الجدول الأسبوعي', 'جدول اليوم والأسبوع + مقترحات جاهزة', 'goSchedule'],
@@ -798,21 +830,26 @@ function viewMore() {
     ['⬇️', 'تصدير نسخة احتياطية', 'احفظ ملف البيانات في مكان آمن', 'exportData'],
     ['⬆️', 'استيراد نسخة احتياطية', 'استرجاع البيانات من ملف', 'importData'],
   ];
-  return `<div class="list menu-list">${items.map(([ico, t, s, a]) => `<div class="item clickable" data-action="${a}"><div class="ico">${ico}</div><div class="main"><div class="title">${t}</div><div class="sub">${s}</div></div><span>‹</span></div>`).join('')}</div>
-  <p style="text-align:center;color:var(--muted);font-size:12px;margin-top:20px">كل البيانات محفوظة على هذا الجهاز فقط.<br>اعمل نسخة احتياطية بانتظام 🔒</p>`;
+  const allowed = {
+    goReports: can('finance'), goImport: can('manage'), exportExcel: can('finance'), goSettings: can('manage'),
+    exportData: can('manage'), importData: can('manage'), goClasses: can('manage') || Cloud.role === 'teacher' || Cloud.role === 'accountant',
+  };
+  const shown = items.filter(([, , , a]) => allowed[a] !== false);
+  return `${accountCard()}<div class="list menu-list">${shown.map(([ico, t, s, a]) => `<div class="item clickable" data-action="${a}"><div class="ico">${ico}</div><div class="main"><div class="title">${t}</div><div class="sub">${s}</div></div><span>‹</span></div>`).join('')}</div>
+  <p style="text-align:center;color:var(--muted);font-size:12px;margin-top:20px">${Cloud.role ? 'البيانات محفوظة على الموبايل وعلى السيرفر ☁️' : 'كل البيانات محفوظة على هذا الجهاز فقط.<br>اعمل نسخة احتياطية بانتظام 🔒'}</p>`;
 }
 
 function viewClasses() {
   return {
     title: 'الفصول',
-    html: `<div class="section-title"><h3>الفصول (${num(D.classes.length)})</h3><button class="btn primary small" data-action="addClass">+ فصل</button></div>
+    html: `<div class="section-title"><h3>الفصول (${num(D.classes.length)})</h3>${can('manage') ? '<button class="btn primary small" data-action="addClass">+ فصل</button>' : ''}</div>
     <div class="list">${D.classes.map((k) => {
       const n = activeChildren().filter((c) => c.classId === k.id).length;
       const t = k.teacherId ? staffById(k.teacherId) : null;
-      return `<div class="item clickable" data-action="editClass" data-id="${k.id}"><div class="avatar">🏫</div><div class="main"><div class="title">${esc(k.name)}</div>
+      return `<div class="item ${can('manage') ? 'clickable' : ''}" data-action="${can('manage') ? 'editClass' : ''}" data-id="${k.id}"><div class="avatar">🏫</div><div class="main"><div class="title">${esc(k.name)}</div>
       <div class="sub">${t ? 'المعلمة: ' + esc(t.name) + ' · ' : ''}${k.ageRange ? esc(k.ageRange) + ' · ' : ''}${k.capacity ? `${num(n)} / ${num(k.capacity)} طفل` : `${num(n)} طفل`}</div></div></div>`;
     }).join('') || '<div class="empty">لا توجد فصول. أضف فصلًا مثل: بيبي كلاس، Pre-KG، KG1، KG2</div>'}</div>
-    ${D.classes.length ? `<button class="btn block" style="margin-top:12px" data-action="assignClasses">👶 توزيع الأطفال على الفصول</button>` : ''}`,
+    ${D.classes.length && can('editChildren') ? `<button class="btn block" style="margin-top:12px" data-action="assignClasses">👶 توزيع الأطفال على الفصول</button>` : ''}`,
   };
 }
 
@@ -910,16 +947,102 @@ function viewSettings() {
     <div class="card"><h3>البيانات</h3>
       <div class="btn-row"><button class="btn" data-action="exportData">⬇️ تصدير نسخة احتياطية</button><button class="btn" data-action="importData">⬆️ استيراد</button>
       <button class="btn" data-action="exportExcel">📤 تصدير إكسيل</button>
-      <button class="btn danger" data-action="wipeData">🗑️ مسح كل البيانات</button></div></div>`,
+      ${Cloud.role ? '' : '<button class="btn danger" data-action="wipeData">🗑️ مسح كل البيانات</button>'}</div></div>`,
   };
 }
 
+function viewMembers() {
+  const ms = state.members;
+  return {
+    title: 'المستخدمين والصلاحيات',
+    html: `<div class="card"><h3>الصلاحيات</h3><dl class="kv">
+      <dt>👑 ${ROLES.owner} / ${ROLES.admin}</dt><dd>كل حاجة</dd>
+      <dt>💰 ${ROLES.accountant}</dt><dd>الأطفال، الحسابات، العاملين والرواتب، الحضور</dd>
+      <dt>👩‍🏫 ${ROLES.teacher}</dt><dd>الحضور، الملاحظات اليومية، الجدول، الرسائل — من غير الفلوس</dd></dl></div>
+    <div class="section-title"><h3>المستخدمين</h3><button class="btn primary small" data-action="addMember">+ مستخدم</button></div>
+    <div class="list"><div class="item"><div class="avatar">👑</div><div class="main"><div class="title">${esc(Cloud.role === 'owner' ? Cloud.email : 'صاحبة الحضانة')}</div><div class="sub">${ROLES.owner}</div></div></div>
+    ${!ms ? '<div class="empty">جاري التحميل...</div>' : ms.map((m) => `<div class="item clickable" data-action="editMember" data-email="${esc(m.email)}"><div class="avatar">${esc(initials(m.name || m.email))}</div>
+      <div class="main"><div class="title">${esc(m.name || m.email)}</div><div class="sub">${esc(m.email)} · ${esc(ROLES[m.role] || m.role)}</div></div><span>✏️</span></div>`).join('') || '<div class="empty">لسه مفيش مستخدمين. ضيف المعلمات والمحاسب عشان يدخلوا من موبايلاتهم.</div>'}</div>`,
+  };
+}
+async function loadMembers() {
+  state.members = null; render();
+  try { state.members = await Cloud.listMembers(); } catch (e) { state.members = []; toast(authMsg(e)); }
+  render();
+}
+function memberForm(m) {
+  const isNew = !m; m = m || { role: 'teacher' };
+  openForm({
+    title: isNew ? 'مستخدم جديد' : 'تعديل مستخدم', data: m,
+    intro: isNew ? '<p class="sub" style="color:var(--muted)">هيتعمل حساب بالإيميل والباسورد دول. ابعتهم للشخص ده عشان يسجل دخول من موبايله.</p>' : '',
+    fields: [
+      { name: 'name', label: 'الاسم', required: true, full: true },
+      ...(isNew ? [{ name: 'email', label: 'الإيميل', type: 'email', required: true, full: true }, { name: 'password', label: 'الباسورد (٦ حروف أو أرقام على الأقل)', full: true }] : []),
+      { name: 'role', label: 'الصلاحية', type: 'select', options: [['teacher', ROLES.teacher], ['accountant', ROLES.accountant], ['admin', ROLES.admin]], full: true },
+    ],
+    onSave: async (v) => {
+      if (isNew && v.password && v.password.length < 6) { toast('الباسورد لازم ٦ حروف أو أرقام على الأقل'); return false; }
+      try { await Cloud.addMember({ ...m, ...v, email: v.email || m.email, password: isNew ? v.password : '' }); }
+      catch (e) { toast(authMsg(e)); return false; }
+      toast('تم الحفظ ✅'); loadMembers();
+    },
+    onDelete: isNew ? null : async () => { await Cloud.removeMember(m.email); loadMembers(); },
+    deleteLabel: 'إلغاء الحساب',
+  });
+}
+
+// ---------- شاشة الدخول ----------
+function syncLabel() {
+  return { synced: '✅ متزامن مع السيرفر', pending: '⏳ في تغييرات هتترفع حالًا', offline: '📴 مفيش إنترنت — التغييرات هتترفع لما النت يرجع', connecting: '🔄 جاري الاتصال...', error: '⚠️ ' + esc(Cloud.error), local: '' }[Cloud.status] || '';
+}
+function renderSync() {
+  const dot = $('#syncDot'); if (!dot) return;
+  const map = { synced: ['☁️', 'متزامن'], pending: ['⏳', 'جاري الرفع'], offline: ['📴', 'بدون إنترنت'], connecting: ['🔄', 'جاري الاتصال'], error: ['⚠️', 'خطأ'] };
+  const v = Cloud.role || Cloud.status === 'connecting' || Cloud.status === 'error' ? map[Cloud.status] : null;
+  dot.classList.toggle('hidden', !v);
+  if (v) { dot.textContent = v[0]; dot.title = v[1]; }
+}
+function renderGate() {
+  const g = $('#gate');
+  const skip = LS.get('skipLogin') === '1' && !state.forceLogin;
+  let html = '';
+  if (Cloud.ready && Cloud.status === 'noaccess') {
+    html = `<h2>⛔ الحساب لسه ما اتضافش</h2><p>حسابك (${esc(Cloud.email)}) مش متضاف في قائمة المستخدمين.<br>اطلب من المديرة تضيفك من: المزيد ← المستخدمين والصلاحيات.</p>
+      <button class="btn primary block" data-action="logout">تسجيل خروج</button>`;
+  } else if (Cloud.ready && Cloud.status === 'connecting' && Cloud.user && !Cloud.role) {
+    html = `<h2>🔄 جاري الاتصال بالسيرفر</h2><p>${esc(Cloud.error || 'لحظة واحدة...')}</p>`;
+  } else if (Cloud.ready && !Cloud.user && !skip && Cloud.status !== 'connecting') {
+    html = `<form id="loginForm" class="form" style="grid-template-columns:1fr">
+      <label>الإيميل<input type="email" id="lEmail" autocomplete="username" required></label>
+      <label>الباسورد<input type="password" id="lPass" autocomplete="current-password" required></label>
+      <div id="lErr" class="alert hidden"></div>
+      <button class="btn primary block" type="submit">دخول</button>
+      <button class="btn block" type="button" data-action="forgotPass">نسيت الباسورد</button>
+      <button class="btn block" type="button" data-action="skipLogin" style="background:#f3f3f3;color:#666">استخدام بدون حساب (على الموبايل ده بس)</button></form>`;
+  } else if (Cloud.status === 'error' && Cloud.user && !Cloud.role) {
+    html = `<h2>⚠️ مشكلة في الاتصال</h2><p>${esc(Cloud.error)}</p><button class="btn primary block" data-action="retry">حاول تاني</button><button class="btn block" data-action="logout">تسجيل خروج</button>`;
+  }
+  g.classList.toggle('hidden', !html);
+  if (html && g.dataset.html !== html) {
+    g.dataset.html = html;
+    g.querySelector('.gate-body').innerHTML = html;
+    const f = $('#loginForm');
+    if (f) f.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const err = $('#lErr'); err.classList.add('hidden');
+      try { await Cloud.login($('#lEmail').value, $('#lPass').value); state.forceLogin = false; LS.del('skipLogin'); }
+      catch (x) { err.textContent = authMsg(x); err.classList.remove('hidden'); }
+    });
+  }
+  if (!html) g.dataset.html = '';
+}
+
 const TABS = { home: viewHome, children: viewChildren, attendance: viewAttendance, finance: viewFinance, staff: viewStaffTab, more: viewMore };
-const VIEWS = { child: viewChildProfile, staffProfile: viewStaffProfile, classes: viewClasses, assign: viewAssign, reports: viewReports, settings: viewSettings, notes: viewNotes, schedule: viewSchedule, themes: viewThemes, messages: viewMessages, import: viewImport, about: viewAbout };
+const VIEWS = { child: viewChildProfile, staffProfile: viewStaffProfile, classes: viewClasses, assign: viewAssign, reports: viewReports, settings: viewSettings, notes: viewNotes, schedule: viewSchedule, themes: viewThemes, messages: viewMessages, import: viewImport, about: viewAbout, members: viewMembers };
 
 // ================== النماذج ==================
 function openModal(title, html) { $('#modalTitle').textContent = title; $('#modalBody').innerHTML = html; $('#modal').classList.remove('hidden'); }
-function closeModal() { $('#modal').classList.add('hidden'); $('#modalBody').innerHTML = ''; }
+function closeModal() { $('#modal').classList.add('hidden'); $('#modalBody').innerHTML = ''; if (pendingRender) { pendingRender = false; render(); } }
 
 function field(f, v) {
   const val = v ?? f.value ?? '';
@@ -1249,7 +1372,9 @@ async function importFile(file) {
   try {
     const json = JSON.parse(await file.text());
     if (!confirm('سيتم استبدال كل البيانات الحالية بالبيانات الموجودة في الملف. متابعة؟')) return;
-    await DB.importAll(json); await loadAll(); go('home'); toast('تم استيراد البيانات ✅');
+    await DB.importAll(json); await loadAll();
+    if (Cloud.role) { toast('جاري رفع البيانات للسيرفر...'); await Cloud.uploadAll(); }
+    go('home'); toast('تم استيراد البيانات ✅');
   } catch (e) { alert('تعذر قراءة الملف: ' + (e.message || e)); }
 }
 
@@ -1270,6 +1395,18 @@ async function staffMark(staffId, status) {
 }
 
 const ACTIONS = {
+  showLogin: () => { state.forceLogin = true; render(); },
+  skipLogin: () => { LS.set('skipLogin', '1'); state.forceLogin = false; render(); },
+  forgotPass: async () => {
+    const email = ($('#lEmail') || {}).value || prompt('اكتب الإيميل:');
+    if (!email) return;
+    try { await Cloud.resetPassword(email); alert('تم إرسال رابط تغيير الباسورد على الإيميل 📧'); } catch (e) { alert(authMsg(e)); }
+  },
+  logout: async () => { if (confirm('تسجيل خروج من الموبايل ده؟\nالبيانات محفوظة على السيرفر وهترجع لما تسجل دخول تاني.')) await Cloud.logout(); },
+  retry: () => location.reload(),
+  goMembers: () => { state.members = null; push('members'); loadMembers(); },
+  addMember: () => memberForm(null),
+  editMember: (el) => memberForm((state.members || []).find((m) => m.email === el.dataset.email)),
   closeModal, doPrint, exportExcel, exportData, runImport,
   goAttendance: () => go('attendance'),
   goDues: () => { state.finTab = 'dues'; state.month = thisMonth(); go('finance'); },
@@ -1464,7 +1601,12 @@ async function firstRun() {
 
 (async function init() {
   await loadAll();
-  await firstRun();
+  if (!LS.get('linked')) await firstRun();
   render();
+  Cloud.init(async (what) => {
+    if (what === 'reload') { await loadAll(); render(); }
+    else if (what === 'data') softRender();
+    else render();
+  });
   if ('serviceWorker' in navigator && location.protocol.startsWith('http') && !window.Android) navigator.serviceWorker.register('sw.js').catch(() => {});
 })();

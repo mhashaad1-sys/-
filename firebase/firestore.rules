@@ -1,0 +1,47 @@
+rules_version = '2';
+
+// قواعد حماية بيانات حضانة براعم
+// - صاحبة الحساب (أول من سجّل الدخول) والمديرين: كل حاجة
+// - المحاسب: الأطفال والحسابات والعاملين والرواتب
+// - المعلمة: الأطفال (قراءة)، الحضور، الملاحظات، الجدول
+// - أي حد مش متضاف في قائمة المستخدمين: ممنوع يشوف أي حاجة
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function orgPath() { return /databases/$(database)/documents/org/baraem; }
+    function memberPath() { return /databases/$(database)/documents/org/baraem/members/$(request.auth.token.email.lower()); }
+    function isOwner() { return signedIn() && get(orgPath()).data.owner == request.auth.uid; }
+    function hasRole(r) { return signedIn() && request.auth.token.email != null && exists(memberPath()) && get(memberPath()).data.role == r; }
+    function isAdmin() { return isOwner() || hasRole('admin'); }
+    function isAccountant() { return hasRole('accountant'); }
+    function isTeacher() { return hasRole('teacher'); }
+
+    function canRead(c) {
+      return isAdmin()
+        || ((isAccountant() || isTeacher()) && c in ['settings', 'classes', 'children', 'attDays', 'notes', 'schedule'])
+        || (isAccountant() && c in ['payments', 'expenses', 'staff', 'staffTx', 'staffAttDays']);
+    }
+    function canWrite(c) {
+      return isAdmin()
+        || ((isAccountant() || isTeacher()) && c in ['attDays', 'notes', 'schedule'])
+        || (isAccountant() && c in ['children', 'payments', 'expenses', 'staff', 'staffTx']);
+    }
+
+    match /org/baraem {
+      allow read: if signedIn();
+      // أول حساب يسجّل يبقى صاحب الحضانة، ومحدش يقدر يغيّره بعد كده
+      allow create: if signedIn() && request.resource.data.owner == request.auth.uid;
+    }
+
+    match /org/baraem/members/{email} {
+      allow read: if isAdmin() || (signedIn() && request.auth.token.email.lower() == email);
+      allow write: if isAdmin();
+    }
+
+    match /org/baraem/{col}/{id} {
+      allow read: if col != 'members' && canRead(col);
+      allow write: if col != 'members' && canWrite(col);
+    }
+  }
+}
