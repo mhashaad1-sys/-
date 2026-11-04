@@ -4,6 +4,7 @@ rules_version = '2';
 // - صاحبة الحساب (أول من سجّل الدخول) والمديرين: كل حاجة
 // - المحاسب: الأطفال والحسابات والعاملين والرواتب
 // - المعلمة: الأطفال (قراءة)، الحضور، الملاحظات، الجدول
+// - ولي الأمر: ملف طفله بس (حضور، ملاحظات، مصاريف) + الإعلانات والجدول، ويبعت طلبات لطفله بس
 // - أي حد مش متضاف في قائمة المستخدمين: ممنوع يشوف أي حاجة
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -16,15 +17,19 @@ service cloud.firestore {
     function isAdmin() { return isOwner() || hasRole('admin'); }
     function isAccountant() { return hasRole('accountant'); }
     function isTeacher() { return hasRole('teacher'); }
+    function isParent() { return hasRole('parent'); }
+    function isStaff() { return isAdmin() || isAccountant() || isTeacher(); }
+    function myKids() { return get(memberPath()).data.childIds; }
 
     function canRead(c) {
       return isAdmin()
-        || ((isAccountant() || isTeacher()) && c in ['settings', 'classes', 'children', 'attDays', 'notes', 'schedule'])
-        || (isAccountant() && c in ['payments', 'expenses', 'staff', 'staffTx', 'staffAttDays']);
+        || ((isAccountant() || isTeacher()) && c in ['settings', 'classes', 'children', 'attDays', 'notes', 'schedule', 'requests', 'announcements'])
+        || (isAccountant() && c in ['payments', 'expenses', 'staff', 'staffTx', 'staffAttDays'])
+        || (isParent() && c in ['settings', 'schedule', 'announcements']);
     }
     function canWrite(c) {
       return isAdmin()
-        || ((isAccountant() || isTeacher()) && c in ['attDays', 'notes', 'schedule'])
+        || ((isAccountant() || isTeacher()) && c in ['attDays', 'notes', 'schedule', 'requests'])
         || (isAccountant() && c in ['children', 'payments', 'expenses', 'staff', 'staffTx']);
     }
 
@@ -37,6 +42,21 @@ service cloud.firestore {
     match /org/baraem/members/{email} {
       allow read: if isAdmin() || (signedIn() && request.auth.token.email.lower() == email);
       allow write: if isAdmin();
+    }
+
+    // ملف كل طفل اللي ولي الأمر بيشوفه
+    match /org/baraem/family/{cid} {
+      allow read: if isStaff() || (isParent() && cid in myKids());
+      allow write: if isStaff();
+    }
+
+    // طلبات أولياء الأمور (غياب، دواء، ...)
+    match /org/baraem/requests/{rid} {
+      allow read: if isParent() && resource.data.childId in myKids();
+      allow create: if isParent() && request.resource.data.childId in myKids()
+        && request.resource.data.status == 'pending' && request.resource.data.by == request.auth.token.email.lower();
+      allow update: if isParent() && resource.data.childId in myKids() && resource.data.status == 'pending'
+        && request.resource.data.status == 'cancelled' && request.resource.data.childId == resource.data.childId;
     }
 
     match /org/baraem/{col}/{id} {

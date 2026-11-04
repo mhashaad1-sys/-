@@ -88,8 +88,17 @@ async function save(store, obj) {
   const i = D[store].findIndex((x) => x.id === obj.id);
   if (i >= 0) D[store][i] = obj; else D[store].push(obj);
   Cloud.write(store, obj);
+  famHook(store, obj);
 }
-async function remove(store, id) { await DB.del(store, id); D[store] = D[store].filter((x) => x.id !== id); Cloud.del(store, id); }
+async function remove(store, id) {
+  const old = D[store].find((x) => x.id === id);
+  await DB.del(store, id); D[store] = D[store].filter((x) => x.id !== id); Cloud.del(store, id);
+  if (old) famHook(store, old);
+}
+function famHook(store, obj) {
+  if (store === 'children') queueFamily(obj.id);
+  else if (['attendance', 'payments', 'notes'].includes(store)) queueFamily(obj.childId);
+}
 
 // الصلاحيات: finance (الفلوس)، staff (العاملين)، editChildren، manage (الإعدادات والمستخدمين)
 function can(p) {
@@ -165,17 +174,19 @@ window.addEventListener('popstate', () => {
 
 function render() {
   const top = state.stack[state.stack.length - 1];
-  if ((state.tab === 'finance' && !can('finance')) || (state.tab === 'staff' && !can('staff'))) state.tab = 'home';
-  document.querySelectorAll('.bottom-nav button').forEach((b) => {
-    b.classList.toggle('active', b.dataset.tab === state.tab);
-    b.classList.toggle('hidden', (b.dataset.tab === 'finance' && !can('finance')) || (b.dataset.tab === 'staff' && !can('staff')));
-  });
+  const parent = isParent();
+  const navTabs = parent ? PARENT_TABS : [['home', '🏠', 'الرئيسية'], ['children', '👶', 'الأطفال'], ['attendance', '✅', 'الحضور'], ['finance', '💰', 'الحسابات'], ['staff', '👩‍🏫', 'العاملين'], ['more', '☰', 'المزيد']]
+    .filter(([t]) => !((t === 'finance' && !can('finance')) || (t === 'staff' && !can('staff'))));
+  if (!navTabs.some(([t]) => t === state.tab)) { state.tab = navTabs[0][0]; state.stack = []; }
+  if (parent && state.tab === 'pReq' && !top) markSeen('req');
+  const badges = parent ? parentBadges() : { home: Cloud.role ? pendingRequests().length : 0 };
+  $('.bottom-nav').innerHTML = navTabs.map(([t, ico, label]) => `<button data-tab="${t}" class="${t === state.tab ? 'active' : ''}"><span>${ico}</span>${label}${badges[t] ? `<b class="nav-badge">${num(badges[t])}</b>` : ''}</button>`).join('');
   renderSync(); renderGate();
   $('#backBtn').classList.toggle('hidden', !top);
   $('#nurseryName').textContent = settings().name;
-  let html, title = TITLES[state.tab];
+  let html, title = parent ? (PARENT_TABS.find((x) => x[0] === state.tab) || [])[2] : TITLES[state.tab];
   if (top) { const v = VIEWS[top.view](top); html = v.html; title = v.title; }
-  else html = TABS[state.tab]();
+  else html = (parent ? PARENT_VIEWS : TABS)[state.tab]();
   $('#pageTitle').textContent = title;
   $('#view').innerHTML = html;
 }
@@ -227,6 +238,8 @@ function viewHome() {
     ${can('finance') ? `<div class="stat green"><div class="label">المتوقع تحصيله شهريًا</div><div class="value">${money(sum(kids, (c) => c.monthlyFee))}</div></div>` : ''}
   </div>
 
+  ${Cloud.role && pendingRequests().length ? `<div class="card req-alert clickable" data-action="goRequests"><b>📨 ${num(pendingRequests().length)} طلب جديد من أولياء الأمور</b><div class="sub">${pendingRequests().slice(0, 3).map((r) => esc(`${(child(r.childId) || {}).name || r.childName || ''}: ${(REQUEST_TYPES[r.type] || {}).label || ''}`)).join(' · ')}</div></div>` : ''}
+  ${(() => { const meds = activeChildren().filter((c) => activeMeds(c.id).length); return meds.length ? `<div class="alert">💊 أدوية النهارده: ${meds.map((c) => esc(c.name + ' (' + activeMeds(c.id).map((r) => r.medName + ' ' + (r.time || '')).join('، ') + ')')).join(' · ')}</div>` : ''; })()}
   ${todaySchedule()}
 
   ${can('finance') ? `<div class="section-title"><h3>لم يدفعوا اشتراك ${monthLabel(m)} (${num(unpaid.length)})</h3>${unpaid.length ? '<button class="btn small" data-action="goDues">عرض الكل</button>' : ''}</div>
@@ -306,6 +319,7 @@ function viewChildProfile({ id }) {
         ${can('editChildren') ? `<button class="btn small" data-action="editChild" data-id="${c.id}">✏️ تعديل</button>` : ''}
       </div>
     </div>
+    ${parentSection(c)}
 
     <div class="card"><h3>البيانات</h3><dl class="kv">
       ${kv('تاريخ الميلاد', c.birthDate ? dateLabel(c.birthDate) : '')}
@@ -358,8 +372,10 @@ function viewAttendance() {
   <div class="list">${kids.map((c) => {
     const a = attOf(d, c.id), st = a ? a.status : '';
     return `<div class="item">${avatar(c)}
-      <div class="main"><div class="title">${esc(c.name)}</div>
-      <div class="sub">${a && a.checkIn ? `دخول ${a.checkIn}` : esc(className(c.classId))}${a && a.checkOut ? ` · خروج ${a.checkOut}` : ''}</div></div>
+      <div class="main"><div class="title">${esc(c.name)}${activeMeds(c.id, d).length ? ' 💊' : ''}${dayRequests(c.id, d).length ? ' 🧍' : ''}</div>
+      <div class="sub">${a && a.checkIn ? `دخول ${a.checkIn}` : esc(className(c.classId))}${a && a.checkOut ? ` · خروج ${a.checkOut}` : ''}${a && a.excuse ? ` · بإذن: ${esc(a.excuse)}` : ''}</div>
+      ${activeMeds(c.id, d).map((r) => `<div class="sub" style="color:var(--primary-dark)">💊 ${esc(r.medName)} ${esc(r.dose || '')} ${esc(r.time || '')}</div>`).join('')}
+      ${dayRequests(c.id, d).map((r) => `<div class="sub" style="color:var(--purple)">${REQUEST_TYPES[r.type].icon} ${esc(r.type === 'pickup' ? 'هيستلمه: ' + r.person : 'خروج بدري ' + (r.time || ''))}</div>`).join('')}</div>
       <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
       ${attToggle(st, c.id, 'mark', ['present', 'late', 'absent'])}
       ${a && a.status !== 'absent' && !a.checkOut ? `<button class="btn small" data-action="checkout" data-id="${c.id}">🚪 تسجيل خروج</button>` : ''}
@@ -820,7 +836,10 @@ function viewMore() {
   const items = [
     ['📅', 'الجدول الأسبوعي', 'جدول اليوم والأسبوع + مقترحات جاهزة', 'goSchedule'],
     ['🏫', 'الفصول / المجموعات', `${num(D.classes.length)} فصل`, 'goClasses'],
-    ['💬', 'رسائل أولياء الأمور', 'تذكير، إجازة، رحلة، اجتماع...', 'goMessages'],
+    ['📨', 'طلبات أولياء الأمور', `${num(pendingRequests().length)} طلب جديد`, 'goRequests'],
+    ['📢', 'إعلانات لأولياء الأمور', 'تظهر في تطبيق الأهالي مع إشعار', 'goAnn'],
+    ['👨‍👩‍👧', 'حسابات أولياء الأمور', 'عمل حسابات لكل الأهالي مرة واحدة', 'bulkParents'],
+    ['💬', 'رسائل أولياء الأمور (واتساب)', 'تذكير، إجازة، رحلة، اجتماع...', 'goMessages'],
     ['📊', 'التقارير', 'الإيرادات والمصروفات والحضور', 'goReports'],
     ['📝', 'الملاحظات اليومية', `${num(D.notes.length)} ملاحظة`, 'goNotes'],
     ['📥', 'استيراد من إكسيل', 'أطفال، عاملين، مصروفات، مدفوعات', 'goImport'],
@@ -832,7 +851,7 @@ function viewMore() {
   ];
   const allowed = {
     goReports: can('finance'), goImport: can('manage'), exportExcel: can('finance'), goSettings: can('manage'),
-    exportData: can('manage'), importData: can('manage'), goClasses: can('manage') || Cloud.role === 'teacher' || Cloud.role === 'accountant',
+    exportData: can('manage'), importData: can('manage'), goRequests: !!Cloud.role, goAnn: !!Cloud.role, bulkParents: !!Cloud.role && can('manage'), goClasses: can('manage') || Cloud.role === 'teacher' || Cloud.role === 'accountant',
   };
   const shown = items.filter(([, , , a]) => allowed[a] !== false);
   return `${accountCard()}<div class="list menu-list">${shown.map(([ico, t, s, a]) => `<div class="item clickable" data-action="${a}"><div class="ico">${ico}</div><div class="main"><div class="title">${t}</div><div class="sub">${s}</div></div><span>‹</span></div>`).join('')}</div>
@@ -942,6 +961,7 @@ function viewSettings() {
       <label class="full">العنوان<input id="sAddress" value="${esc(s.address)}"></label>
       <label>السن المقبول<input id="sMinAge" value="${esc(s.minAge)}"></label>
       <label>رسوم التسجيل الافتراضية<input id="sRegFee" type="number" value="${esc(s.regFee)}"></label>
+      <label class="full">طرق الدفع (تظهر لأولياء الأمور)<textarea id="sPayInfo" rows="2" placeholder="مثال: فودافون كاش 010xxxxxxx · إنستاباي ...">${esc(s.payInfo || '')}</textarea></label>
       <div class="actions"><button class="btn primary" data-action="saveSettings">حفظ</button></div>
     </div></div>
     <div class="card"><h3>البيانات</h3>
@@ -961,8 +981,11 @@ function viewMembers() {
       <dt>👩‍🏫 ${ROLES.teacher}</dt><dd>الحضور، الملاحظات اليومية، الجدول، الرسائل — من غير الفلوس</dd></dl></div>
     <div class="section-title"><h3>المستخدمين</h3><button class="btn primary small" data-action="addMember">+ مستخدم</button></div>
     <div class="list"><div class="item"><div class="avatar">👑</div><div class="main"><div class="title">${esc(Cloud.role === 'owner' ? Cloud.email : 'صاحبة الحضانة')}</div><div class="sub">${ROLES.owner}</div></div></div>
-    ${!ms ? '<div class="empty">جاري التحميل...</div>' : ms.map((m) => `<div class="item clickable" data-action="editMember" data-email="${esc(m.email)}"><div class="avatar">${esc(initials(m.name || m.email))}</div>
-      <div class="main"><div class="title">${esc(m.name || m.email)}</div><div class="sub">${esc(m.email)} · ${esc(ROLES[m.role] || m.role)}</div></div><span>✏️</span></div>`).join('') || '<div class="empty">لسه مفيش مستخدمين. ضيف المعلمات والمحاسب عشان يدخلوا من موبايلاتهم.</div>'}</div>`,
+    ${!ms ? '<div class="empty">جاري التحميل...</div>' : ms.filter((m) => m.role !== 'parent').map((m) => `<div class="item clickable" data-action="editMember" data-email="${esc(m.email)}"><div class="avatar">${esc(initials(m.name || m.email))}</div>
+      <div class="main"><div class="title">${esc(m.name || m.email)}</div><div class="sub">${esc(m.email)} · ${esc(ROLES[m.role] || m.role)}</div></div><span>✏️</span></div>`).join('') || '<div class="empty">لسه مفيش مستخدمين. ضيف المعلمات والمحاسب عشان يدخلوا من موبايلاتهم.</div>'}</div>
+    ${ms && ms.some((m) => m.role === 'parent') ? `<div class="section-title"><h3>👨‍👩‍👧 أولياء الأمور (${num(ms.filter((m) => m.role === 'parent').length)})</h3></div>
+    <div class="list">${ms.filter((m) => m.role === 'parent').map((m) => `<div class="item"><div class="avatar">👨‍👩‍👧</div><div class="main"><div class="title">${esc(m.name || '')}</div>
+      <div class="sub">${esc(m.phone || '')} · ${esc((m.childIds || []).map((id) => (child(id) || {}).name || '').filter(Boolean).join('، '))}</div></div></div>`).join('')}</div>` : ''}`,
   };
 }
 async function loadMembers() {
@@ -1013,7 +1036,7 @@ function renderGate() {
     html = `<h2>🔄 جاري الاتصال بالسيرفر</h2><p>${esc(Cloud.error || 'لحظة واحدة...')}</p>`;
   } else if (Cloud.ready && !Cloud.user && !skip && Cloud.status !== 'connecting') {
     html = `<form id="loginForm" class="form" style="grid-template-columns:1fr">
-      <label>الإيميل<input type="email" id="lEmail" autocomplete="username" required></label>
+      <label>الإيميل أو رقم الموبايل (لأولياء الأمور)<input type="text" id="lEmail" autocomplete="username" inputmode="email" dir="ltr" required></label>
       <label>الباسورد<input type="password" id="lPass" autocomplete="current-password" required></label>
       <div id="lErr" class="alert hidden"></div>
       <button class="btn primary block" type="submit">دخول</button>
@@ -1038,7 +1061,7 @@ function renderGate() {
 }
 
 const TABS = { home: viewHome, children: viewChildren, attendance: viewAttendance, finance: viewFinance, staff: viewStaffTab, more: viewMore };
-const VIEWS = { child: viewChildProfile, staffProfile: viewStaffProfile, classes: viewClasses, assign: viewAssign, reports: viewReports, settings: viewSettings, notes: viewNotes, schedule: viewSchedule, themes: viewThemes, messages: viewMessages, import: viewImport, about: viewAbout, members: viewMembers };
+const VIEWS = { child: viewChildProfile, staffProfile: viewStaffProfile, classes: viewClasses, assign: viewAssign, reports: viewReports, settings: viewSettings, notes: viewNotes, schedule: viewSchedule, themes: viewThemes, messages: viewMessages, import: viewImport, about: viewAbout, members: viewMembers, requests: viewRequests, announcements: viewAnnouncements, bulkParents: viewBulkParents };
 
 // ================== النماذج ==================
 function openModal(title, html) { $('#modalTitle').textContent = title; $('#modalBody').innerHTML = html; $('#modal').classList.remove('hidden'); }
@@ -1346,7 +1369,7 @@ function slotForm(i) {
 function noteForm(n, preset = {}) {
   const isNew = !n;
   if (isNew && !childOptions().length) { toast('أضف طفلًا أولاً'); return; }
-  const base = n || { date: today(), kind: 'عام', ...preset };
+  const base = n || { date: today(), kind: 'عام', share: true, ...preset };
   openForm({
     title: isNew ? 'ملاحظة يومية' : 'تعديل ملاحظة', data: base,
     fields: [
@@ -1354,6 +1377,7 @@ function noteForm(n, preset = {}) {
       { name: 'kind', label: 'النوع', type: 'select', options: NOTE_KINDS.map((x) => [x, x]) },
       { name: 'date', label: 'التاريخ', type: 'date' },
       { name: 'text', label: 'الملاحظة', type: 'textarea', rows: 4, required: true, full: true },
+      { name: 'share', label: 'تظهر لولي الأمر في التطبيق', type: 'checkbox', full: true },
     ],
     onSave: async (v) => { await save('notes', { ...base, ...v, id: base.id || uid() }); toast('تم الحفظ ✅'); },
     onDelete: isNew ? null : async () => { await remove('notes', n.id); },
@@ -1400,10 +1424,34 @@ const ACTIONS = {
   forgotPass: async () => {
     const email = ($('#lEmail') || {}).value || prompt('اكتب الإيميل:');
     if (!email) return;
+    if (!email.includes('@')) { alert('لو انت ولي أمر: كلم الحضانة وهي تعملك باسورد جديد.'); return; }
     try { await Cloud.resetPassword(email); alert('تم إرسال رابط تغيير الباسورد على الإيميل 📧'); } catch (e) { alert(authMsg(e)); }
   },
   logout: async () => { if (confirm('تسجيل خروج من الموبايل ده؟\nالبيانات محفوظة على السيرفر وهترجع لما تسجل دخول تاني.')) await Cloud.logout(); },
   retry: () => location.reload(),
+  pickKid: (el) => { state.kid = el.dataset.id; render(); },
+  pTab: (el) => go(el.dataset.t),
+  newReq: (el) => requestForm(el.dataset.type),
+  cancelReq: async (el) => {
+    const r = (Cloud.req[el.dataset.child] || []).find((x) => x.id === el.dataset.id);
+    if (r && confirm('إلغاء الطلب؟')) { try { await Cloud.cancelRequest(r); toast('تم الإلغاء'); } catch (e) { toast(authMsg(e)); } }
+  },
+  goRequests: () => { state.reqTab = 'pending'; push('requests'); },
+  reqTab: (el) => { state.reqTab = el.dataset.t; render(); },
+  decideReq: (el) => decideForm(D.requests.find((x) => x.id === el.dataset.id)),
+  reqDecision: (el) => reqDecision(el.dataset.id, el.dataset.st),
+  goAnn: () => push('announcements'),
+  addAnn: () => annForm(null),
+  editAnn: (el) => annForm(D.announcements.find((x) => x.id === el.dataset.id)),
+  makeParent: (el) => { const c = child(el.dataset.id); if (!c.phone) { toast('ضيف رقم تليفون ولي الأمر الأول (تعديل)'); return; } parentForm(c); },
+  republishFam: (el) => { publishFamily(el.dataset.id); toast('تم التحديث ✅'); },
+  unlinkParent: async (el) => {
+    const c = child(el.dataset.id);
+    if (!confirm(`إلغاء ربط حساب ولي الأمر بـ ${c.name}؟`)) return;
+    await Cloud.removeParentChild(parentEmail(c.parentLogin), c.id);
+    const upd = { ...c }; delete upd.parentLogin; await save('children', upd); render();
+  },
+  bulkParents,
   goMembers: () => { state.members = null; push('members'); loadMembers(); },
   addMember: () => memberForm(null),
   editMember: (el) => memberForm((state.members || []).find((m) => m.email === el.dataset.email)),
@@ -1512,7 +1560,7 @@ const ACTIONS = {
   },
   shareAbout: () => shareText(aboutText()),
   saveSettings: async () => {
-    await saveSettings({ name: $('#sName').value.trim() || DEFAULT_SETTINGS.name, slogan: $('#sSlogan').value.trim(), phone: $('#sPhone').value.trim(), currency: $('#sCurrency').value.trim() || 'ج.م', address: $('#sAddress').value.trim(), minAge: $('#sMinAge').value.trim(), regFee: Number($('#sRegFee').value) || '' });
+    await saveSettings({ name: $('#sName').value.trim() || DEFAULT_SETTINGS.name, slogan: $('#sSlogan').value.trim(), phone: $('#sPhone').value.trim(), currency: $('#sCurrency').value.trim() || 'ج.م', address: $('#sAddress').value.trim(), minAge: $('#sMinAge').value.trim(), regFee: Number($('#sRegFee').value) || '', payInfo: $('#sPayInfo').value.trim() });
     toast('تم حفظ الإعدادات ✅'); render();
   },
   importData: () => $('#importFile').click(),

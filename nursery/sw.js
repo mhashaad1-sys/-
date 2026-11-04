@@ -1,5 +1,5 @@
-const CACHE_NAME = 'baraem-cache-v3';
-const ASSETS = ['./', './index.html', './manifest.json', './css/style.css', './js/db.js', './js/seed.js', './js/xlsx.js', './js/cloud.js', './vendor/firebase-app-compat.js', './vendor/firebase-auth-compat.js', './vendor/firebase-firestore-compat.js', './js/app.js', './img/logo-192.png', './img/banner.jpg'];
+const CACHE_NAME = 'baraem-cache-v4';
+const ASSETS = ['./', './index.html', './manifest.json', './css/style.css', './js/db.js', './js/seed.js', './js/xlsx.js', './js/cloud.js', './js/family.js', './vendor/firebase-app-compat.js', './vendor/firebase-auth-compat.js', './vendor/firebase-firestore-compat.js', './js/app.js', './img/logo-192.png', './img/banner.jpg'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE_NAME).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));

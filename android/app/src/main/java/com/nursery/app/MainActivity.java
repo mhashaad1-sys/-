@@ -3,6 +3,12 @@ package com.nursery.app;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.net.Uri;
@@ -60,6 +66,10 @@ public class MainActivity extends Activity {
         s.setAllowContentAccess(true);
         s.setTextZoom(100);
 
+        if (Build.VERSION.SDK_INT >= 26) {
+            NotificationChannel ch = new NotificationChannel("baraem", "إشعارات الحضانة", NotificationManager.IMPORTANCE_HIGH);
+            getSystemService(NotificationManager.class).createNotificationChannel(ch);
+        }
         webView.addJavascriptInterface(new Bridge(), "Android");
         webView.setWebViewClient(new LocalClient());
         webView.setWebChromeClient(new Chrome());
@@ -225,6 +235,29 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void saveBase64(String name, String mime, String base64) {
             saveBytes(name, mime, Base64.decode(base64, Base64.DEFAULT));
+        }
+
+        @JavascriptInterface
+        public void askNotifications() {
+            runOnUiThread(() -> {
+                if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission("android.permission.POST_NOTIFICATIONS") != PackageManager.PERMISSION_GRANTED) {
+                    requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, 7);
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void notify(String title, String body) {
+            runOnUiThread(() -> {
+                Intent open = new Intent(MainActivity.this, MainActivity.class);
+                open.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                PendingIntent pi = PendingIntent.getActivity(MainActivity.this, 0, open, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+                Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(MainActivity.this, "baraem") : new Notification.Builder(MainActivity.this);
+                b.setSmallIcon(R.drawable.ic_notify).setContentTitle(title).setContentText(body)
+                        .setStyle(new Notification.BigTextStyle().bigText(body)).setAutoCancel(true).setContentIntent(pi);
+                NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+                nm.notify((int) (System.currentTimeMillis() % 1000000), b.build());
+            });
         }
 
         @JavascriptInterface

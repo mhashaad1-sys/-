@@ -13,19 +13,26 @@ const FIREBASE_CONFIG = {
 };
 const ORG_ID = 'baraem';
 
-const ROLES = { owner: 'صاحبة الحضانة', admin: 'مدير/ة', accountant: 'محاسب/ة', teacher: 'معلمة / مشرفة' };
-const ALL_STORES = ['settings', 'classes', 'children', 'attendance', 'payments', 'expenses', 'staff', 'notes', 'staffAtt', 'staffTx', 'schedule'];
-const BASIC_STORES = ['settings', 'classes', 'children', 'attendance', 'notes', 'schedule'];
+const ROLES = { owner: 'صاحبة الحضانة', admin: 'مدير/ة', accountant: 'محاسب/ة', teacher: 'معلمة / مشرفة', parent: 'ولي أمر' };
+const ALL_STORES = ['settings', 'classes', 'children', 'attendance', 'payments', 'expenses', 'staff', 'notes', 'staffAtt', 'staffTx', 'schedule', 'requests', 'announcements'];
+const BASIC_STORES = ['settings', 'classes', 'children', 'attendance', 'notes', 'schedule', 'requests', 'announcements'];
 const CLOUD_READ = {
   admin: ALL_STORES,
   accountant: [...BASIC_STORES, 'payments', 'expenses', 'staff', 'staffTx', 'staffAtt'],
   teacher: BASIC_STORES,
+  parent: [],
 };
 const CLOUD_WRITE = {
   admin: ALL_STORES,
-  accountant: ['attendance', 'notes', 'schedule', 'children', 'payments', 'expenses', 'staff', 'staffTx'],
-  teacher: ['attendance', 'notes', 'schedule'],
+  accountant: ['attendance', 'notes', 'schedule', 'requests', 'children', 'payments', 'expenses', 'staff', 'staffTx'],
+  teacher: ['attendance', 'notes', 'schedule', 'requests'],
+  parent: [],
 };
+// حسابات أولياء الأمور بتتعمل برقم الموبايل (بيتحول لإيميل داخلي)
+const PARENT_DOMAIN = 'parents.baraem.app';
+const toDigits = (p) => String(p || '').replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/\D/g, '');
+const parentEmail = (phone) => `${toDigits(phone)}@${PARENT_DOMAIN}`;
+const loginEmail = (id) => (String(id).includes('@') ? String(id).trim() : parentEmail(id));
 // الحضور بيتخزن على السيرفر مستند واحد لكل يوم (أوفر بكتير من مستند لكل طفل)
 const DAY_STORES = { attendance: { col: 'attDays', key: 'childId' }, staffAtt: { col: 'staffAttDays', key: 'staffId' } };
 const cloudCol = (s) => (DAY_STORES[s] ? DAY_STORES[s].col : s);
@@ -38,6 +45,7 @@ const clean = (o) => JSON.parse(JSON.stringify(o));
 
 const Cloud = {
   ready: false, user: null, role: null, email: '', name: '', status: 'local', error: '',
+  childIds: [], fam: {}, req: {}, loaded: {},
   unsubs: [], pending: false, queue: Promise.resolve(), onChange: () => {},
 
   init(onChange) {
@@ -76,7 +84,7 @@ const Cloud = {
   canRead(s) { return !this.role || (CLOUD_READ[this.effRole()] || []).includes(s); },
   canWrite(s) { return !this.role || (CLOUD_WRITE[this.effRole()] || []).includes(s); },
 
-  async login(email, pass) { await this.auth.signInWithEmailAndPassword(email.trim(), pass); },
+  async login(id, pass) { await this.auth.signInWithEmailAndPassword(loginEmail(id), pass); },
   async resetPassword(email) { await this.auth.sendPasswordResetEmail(email.trim()); },
   async logout() {
     this.stop();
@@ -111,6 +119,7 @@ const Cloud = {
       const m = await this.col('members').doc(this.email).get();
       if (!m.exists) { this.status = 'noaccess'; this.onChange('status'); return; }
       role = m.data().role; this.name = m.data().name || '';
+      this.childIds = m.data().childIds || [];
     }
     this.role = role;
 
@@ -121,14 +130,15 @@ const Cloud = {
       LS.set('linked', u.uid);
     }
     this.onChange('reload');
-    this.start();
+    if (role === 'parent') this.startParent(); else this.start();
 
     // لو المدير غيّر الصلاحية أو شال الحساب
     if (role !== 'owner') {
       this.unsubs.push(this.col('members').doc(this.email).onSnapshot((d) => {
-        if (!d.exists || d.data().role !== this.role) location.reload();
+        if (!d.exists || d.data().role !== this.role || JSON.stringify(d.data().childIds || []) !== JSON.stringify(this.childIds)) location.reload();
       }, () => {}));
     }
+    if (window.Android && window.Android.askNotifications) window.Android.askNotifications();
   },
 
   start() {
@@ -162,10 +172,14 @@ const Cloud = {
           else await localDel(s, id);
         }
       } else if (d.deleted) await localDel(s, ch.doc.id);
-      else await localPut(s, { ...d, id: ch.doc.id });
+      else {
+        if (s === 'requests' && this.loaded[s] && ch.type === 'added' && d.status === 'pending' && d.by !== this.email && typeof notifyRequest === 'function') notifyRequest(d);
+        await localPut(s, { ...d, id: ch.doc.id });
+      }
       changed = true;
     }
     if (maxU) LS.set('sync_' + c, String(maxU));
+    if (!snap.metadata.fromCache) this.loaded[s] = true;
     if (changed) this.onChange('data');
   },
 
@@ -235,6 +249,71 @@ const Cloud = {
     await this.col('members').doc(email).set({ email, name, role, addedBy: this.email, addedAt: this.ts() });
   },
   async removeMember(email) { await this.col('members').doc(email).delete(); },
+
+  // ---------- أولياء الأمور ----------
+  async addParent({ childId, name, phone, password }) {
+    const email = parentEmail(phone);
+    if (toDigits(phone).length < 8) throw new Error('رقم الموبايل مش صحيح');
+    const ref = this.col('members').doc(email);
+    const old = await ref.get();
+    if (old.exists && old.data().role !== 'parent') throw new Error('الرقم ده متسجل لموظف');
+    if (password) {
+      const sec = firebase.apps.find((a) => a.name === 'sec') || firebase.initializeApp(FIREBASE_CONFIG, 'sec');
+      if (this.emu) { try { sec.auth().useEmulator('http://localhost:9099', { disableWarnings: true }); } catch (e) { /* already */ } }
+      try { await sec.auth().createUserWithEmailAndPassword(email, password); }
+      catch (e) { if (e.code !== 'auth/email-already-in-use') throw e; e.existing = true; if (!old.exists) throw Object.assign(new Error('الرقم ده ليه حساب قديم. امسحه من Firebase ← Authentication وجرب تاني'), { code: 'exists' }); }
+      await sec.auth().signOut();
+    }
+    await ref.set({ email, name, phone: toDigits(phone), role: 'parent', childIds: firebase.firestore.FieldValue.arrayUnion(childId), addedBy: this.email, addedAt: this.ts() }, { merge: true });
+    return { email, existed: old.exists };
+  },
+  async removeParentChild(email, childId) {
+    const ref = this.col('members').doc(email);
+    const d = await ref.get(); if (!d.exists) return;
+    const ids = (d.data().childIds || []).filter((x) => x !== childId);
+    if (ids.length) await ref.update({ childIds: ids }); else await ref.delete();
+  },
+  setFamily(cid, data) {
+    if (!this.role || this.role === 'parent') return;
+    const payload = { ...clean(data), u: this.ts() };
+    this.track(this.col('family').doc(cid).set(payload, { mergeFields: Object.keys(payload) }));
+  },
+
+  // ---------- تطبيق ولي الأمر ----------
+  startParent() {
+    this.status = navigator.onLine ? 'synced' : 'offline';
+    const onErr = (e) => console.warn('parent sync', e.code);
+    for (const cid of this.childIds) {
+      this.unsubs.push(this.col('family').doc(cid).onSnapshot((d) => {
+        const old = this.fam[cid];
+        this.fam[cid] = d.exists ? d.data() : { childId: cid };
+        if (old && typeof parentNotify === 'function') parentNotify('family', cid, old, this.fam[cid]);
+        this.onChange('data');
+      }, onErr));
+      this.unsubs.push(this.col('requests').where('childId', '==', cid).onSnapshot((q) => {
+        const old = this.req[cid];
+        this.req[cid] = q.docs.map((x) => x.data());
+        if (old && typeof parentNotify === 'function') parentNotify('requests', cid, old, this.req[cid]);
+        this.onChange('data');
+      }, onErr));
+    }
+    const intoD = (store, first) => (q) => {
+      const before = D[store].map((x) => x.id);
+      D[store] = q.docs.map((x) => ({ ...x.data(), id: x.id })).filter((x) => !x.deleted).map((x) => { delete x.u; return x; });
+      if (store === 'announcements' && this.loaded.ann && typeof parentNotify === 'function') parentNotify('announcements', null, before, D[store]);
+      if (store === 'announcements') this.loaded.ann = true;
+      this.onChange('data');
+    };
+    this.unsubs.push(this.col('settings').onSnapshot(intoD('settings'), onErr));
+    this.unsubs.push(this.col('schedule').onSnapshot(intoD('schedule'), onErr));
+    this.unsubs.push(this.col('announcements').onSnapshot(intoD('announcements'), onErr));
+    this.onChange('status');
+  },
+  async sendRequest(data) {
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    await this.col('requests').doc(id).set({ ...clean(data), id, status: 'pending', by: this.email, byName: this.name, createdAt: new Date().toISOString(), u: this.ts() });
+  },
+  async cancelRequest(r) { await this.col('requests').doc(r.id).set({ ...clean(r), status: 'cancelled', u: this.ts() }); },
 };
 
 // تحديث البيانات المحلية من السيرفر (من غير ما نرجع نرفعها تاني)
@@ -249,6 +328,7 @@ const AUTH_ERRORS = {
   'auth/invalid-credential': 'الإيميل أو الباسورد غلط', 'auth/wrong-password': 'الباسورد غلط', 'auth/user-not-found': 'الإيميل ده مش متسجل',
   'auth/invalid-email': 'الإيميل مكتوب غلط', 'auth/too-many-requests': 'محاولات كتير، استنى شوية وجرب تاني', 'auth/network-request-failed': 'مفيش إنترنت',
   'auth/weak-password': 'الباسورد لازم يكون ٦ حروف أو أرقام على الأقل', 'auth/operation-not-allowed': 'فعّل Email/Password في Firebase (Authentication ← Sign-in method)',
-  'permission-denied': 'مش مسموح — اتأكد إن قواعد الحماية (Rules) اتنشرت في Firebase',
+  'permission-denied': 'مش مسموح — اتأكد إن قواعد الحماية (Rules) الجديدة اتنشرت في Firebase',
+  'auth/email-already-in-use': 'الحساب ده موجود بالفعل',
 };
 const authMsg = (e) => AUTH_ERRORS[e && e.code] || (e && e.message) || String(e);
