@@ -1,0 +1,34 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.nursery.app'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.nursery.app'
+        minSdk 24
+        targetSdk 34
+        versionCode (System.getenv('GITHUB_RUN_NUMBER') ?: '1').toInteger()
+        versionName "1.0.${System.getenv('GITHUB_RUN_NUMBER') ?: '0'}"
+    }
+
+    // ملفات التطبيق (HTML/CSS/JS) تُؤخذ مباشرة من مجلد nursery في جذر المستودع
+    sourceSets {
+        main {
+            assets.srcDirs = ['../../nursery']
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

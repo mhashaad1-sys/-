@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#7c4dff">
+<title>إدارة الحضانة</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon.svg">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="app-header">
+  <button id="backBtn" class="icon-btn hidden" aria-label="رجوع">→</button>
+  <div class="header-title">
+    <img src="icons/icon.svg" alt="" class="logo">
+    <div>
+      <h1 id="nurseryName">الحضانة</h1>
+      <p id="pageTitle">الرئيسية</p>
+    </div>
+  </div>
+</header>
+
+<main id="view"></main>
+
+<nav class="bottom-nav">
+  <button data-tab="home" class="active"><span>🏠</span>الرئيسية</button>
+  <button data-tab="children"><span>👶</span>الأطفال</button>
+  <button data-tab="attendance"><span>✅</span>الحضور</button>
+  <button data-tab="finance"><span>💰</span>الحسابات</button>
+  <button data-tab="more"><span>☰</span>المزيد</button>
+</nav>
+
+<div id="modal" class="modal hidden">
+  <div class="sheet">
+    <div class="sheet-head">
+      <h2 id="modalTitle"></h2>
+      <button class="icon-btn" data-action="closeModal" aria-label="إغلاق">✕</button>
+    </div>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+<div id="printArea"></div>
+<input type="file" id="importFile" accept="application/json,.json" class="hidden">
+
+<script src="js/db.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
