@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="primary">#7C4DFF</color>
-    <color name="primary_dark">#5E35B1</color>
-    <color name="bg">#F6F4FB</color>
+    <color name="primary">#D6336C</color>
+    <color name="primary_dark">#5B3A8A</color>
+    <color name="bg">#FFF7FA</color>
     <style name="AppTheme" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:colorPrimary">@color/primary</item>
         <item name="android:colorPrimaryDark">@color/primary</item>

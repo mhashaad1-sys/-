@@ -26,6 +26,7 @@ import android.widget.Toast;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import android.util.Base64;
 
 /**
  * يعرض تطبيق الحضانة (ملفات HTML داخل assets) في WebView.
@@ -41,7 +42,7 @@ public class MainActivity extends Activity {
 
     private WebView webView;
     private ValueCallback<Uri[]> fileCallback;
-    private String pendingSaveContent;
+    private byte[] pendingSaveContent;
 
     @SuppressLint({"SetJavaScriptEnabled", "AddJavascriptInterface"})
     @Override
@@ -164,8 +165,19 @@ public class MainActivity extends Activity {
         public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
             if (fileCallback != null) fileCallback.onReceiveValue(null);
             fileCallback = callback;
+            boolean images = false;
+            String[] types = params.getAcceptTypes();
+            if (types != null) for (String t : types) if (t != null && t.startsWith("image")) images = true;
+            Intent intent;
+            if (images) {
+                intent = params.createIntent();
+            } else {
+                intent = new Intent(Intent.ACTION_GET_CONTENT);
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                intent.setType("*/*");
+            }
             try {
-                startActivityForResult(params.createIntent(), REQ_FILE_CHOOSER);
+                startActivityForResult(intent, REQ_FILE_CHOOSER);
             } catch (ActivityNotFoundException e) {
                 fileCallback = null;
                 return false;
@@ -185,8 +197,8 @@ public class MainActivity extends Activity {
         } else if (requestCode == REQ_SAVE_FILE) {
             if (resultCode == RESULT_OK && data != null && data.getData() != null && pendingSaveContent != null) {
                 try (OutputStream out = getContentResolver().openOutputStream(data.getData())) {
-                    out.write(pendingSaveContent.getBytes(StandardCharsets.UTF_8));
-                    Toast.makeText(this, "تم حفظ النسخة الاحتياطية ✅", Toast.LENGTH_LONG).show();
+                    out.write(pendingSaveContent);
+                    Toast.makeText(this, "تم حفظ الملف ✅", Toast.LENGTH_LONG).show();
                 } catch (Exception e) {
                     Toast.makeText(this, "تعذر حفظ الملف", Toast.LENGTH_LONG).show();
                 }
@@ -201,17 +213,31 @@ public class MainActivity extends Activity {
         public void print() {
             runOnUiThread(() -> {
                 PrintManager pm = (PrintManager) getSystemService(PRINT_SERVICE);
-                pm.print("الحضانة", webView.createPrintDocumentAdapter("nursery"), null);
+                pm.print("براعم", webView.createPrintDocumentAdapter("nursery"), null);
             });
         }
 
         @JavascriptInterface
         public void saveFile(String name, String content) {
+            saveBytes(name, "application/json", content.getBytes(StandardCharsets.UTF_8));
+        }
+
+        @JavascriptInterface
+        public void saveBase64(String name, String mime, String base64) {
+            saveBytes(name, mime, Base64.decode(base64, Base64.DEFAULT));
+        }
+
+        @JavascriptInterface
+        public void openUrl(String url) {
+            runOnUiThread(() -> openExternal(Uri.parse(url)));
+        }
+
+        private void saveBytes(String name, String mime, byte[] bytes) {
             runOnUiThread(() -> {
-                pendingSaveContent = content;
+                pendingSaveContent = bytes;
                 Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
                 i.addCategory(Intent.CATEGORY_OPENABLE);
-                i.setType("application/json");
+                i.setType(mime);
                 i.putExtra(Intent.EXTRA_TITLE, name);
                 try {
                     startActivityForResult(i, REQ_SAVE_FILE);

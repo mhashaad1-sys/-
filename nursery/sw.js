@@ -1,5 +1,5 @@
-const CACHE_NAME = 'nursery-cache-v1';
-const ASSETS = ['./', './index.html', './manifest.json', './css/style.css', './js/db.js', './js/app.js', './icons/icon.svg'];
+const CACHE_NAME = 'baraem-cache-v2';
+const ASSETS = ['./', './index.html', './manifest.json', './css/style.css', './js/db.js', './js/seed.js', './js/xlsx.js', './js/app.js', './img/logo-192.png', './img/banner.jpg'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE_NAME).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));

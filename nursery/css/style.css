@@ -1,6 +1,6 @@
 :root {
-  --primary: #7c4dff; --primary-dark: #5e35b1; --bg: #f6f4fb; --card: #fff; --text: #2d2640; --muted: #7a7290;
-  --border: #e6e1f2; --green: #2e9d5b; --red: #d64545; --orange: #e08a1e; --blue: #2f7ed8;
+  --primary: #d6336c; --primary-dark: #a61e4d; --purple: #5b3a8a; --bg: #fff7fa; --card: #fff; --text: #2d2640; --muted: #7a7290;
+  --border: #f0dfe6; --green: #2e9d5b; --red: #d64545; --orange: #e08a1e; --blue: #2f7ed8;
   --radius: 14px;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -15,13 +15,13 @@ input, select, textarea { font-family: inherit; font-size: 16px; }
 
 .app-header {
   position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 8px;
-  background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: #fff;
+  background: linear-gradient(135deg, var(--primary), var(--purple)); color: #fff;
   padding: calc(10px + env(safe-area-inset-top)) 14px 10px;
 }
 .header-title { display: flex; align-items: center; gap: 10px; }
 .header-title h1 { margin: 0; font-size: 17px; }
 .header-title p { margin: 0; font-size: 12px; opacity: .85; }
-.logo { width: 36px; height: 36px; border-radius: 10px; background: #fff2; }
+.logo { width: 40px; height: 40px; border-radius: 50%; background: #fff; }
 .icon-btn { background: transparent; border: 0; color: inherit; font-size: 20px; padding: 6px 10px; border-radius: 10px; }
 .icon-btn:active { background: #0001; }
 
@@ -32,7 +32,7 @@ main { padding: 12px; max-width: 760px; margin: 0 auto; }
   border-top: 1px solid var(--border); padding-bottom: env(safe-area-inset-bottom);
 }
 .bottom-nav button {
-  flex: 1; background: none; border: 0; padding: 7px 0 8px; font-size: 11px; color: var(--muted);
+  flex: 1; background: none; border: 0; padding: 7px 0 8px; font-size: 10.5px; min-width: 0; color: var(--muted);
   display: flex; flex-direction: column; align-items: center; gap: 2px;
 }
 .bottom-nav button span { font-size: 20px; filter: grayscale(1); opacity: .7; }
@@ -58,7 +58,7 @@ main { padding: 12px; max-width: 760px; margin: 0 auto; }
 }
 .quick button span { font-size: 22px; }
 
-.btn { border: 0; border-radius: 10px; padding: 10px 14px; font-weight: 600; background: #efeafc; color: var(--primary-dark); }
+.btn { border: 0; border-radius: 10px; padding: 10px 14px; font-weight: 600; background: #fce4ec; color: var(--primary-dark); text-decoration: none; display: inline-block; }
 .btn.primary { background: var(--primary); color: #fff; }
 .btn.danger { background: #fde8e8; color: var(--red); }
 .btn.green { background: #e3f5ea; color: var(--green); }
@@ -71,9 +71,9 @@ main { padding: 12px; max-width: 760px; margin: 0 auto; }
 input, select, textarea {
   width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: #fff; color: var(--text);
 }
-input:focus, select:focus, textarea:focus { outline: 2px solid #7c4dff55; border-color: var(--primary); }
+input:focus, select:focus, textarea:focus { outline: 2px solid #d6336c55; border-color: var(--primary); }
 
-.tabs { display: flex; background: #e9e4f7; border-radius: 12px; padding: 4px; margin-bottom: 12px; }
+.tabs { display: flex; background: #f6e3ea; border-radius: 12px; padding: 4px; margin-bottom: 12px; }
 .tabs button { flex: 1; border: 0; background: none; padding: 8px; border-radius: 9px; color: var(--muted); font-weight: 600; }
 .tabs button.active { background: #fff; color: var(--primary-dark); box-shadow: 0 1px 2px #0001; }
 
@@ -82,7 +82,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid #7c4dff55; border
   background: var(--card); border-radius: 12px; padding: 10px 12px; display: flex; align-items: center; gap: 10px;
   box-shadow: 0 1px 2px #2d264010;
 }
-.item.clickable { cursor: pointer; } .item.clickable:active { background: #f3effc; }
+.item.clickable { cursor: pointer; } .item.clickable:active { background: #fdeef3; }
 .item .main { flex: 1; min-width: 0; }
 .item .title { font-weight: 600; }
 .item .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
@@ -90,7 +90,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid #7c4dff55; border
 .amount.in { color: var(--green); } .amount.out { color: var(--red); }
 
 .avatar {
-  width: 44px; height: 44px; border-radius: 50%; background: #ede7ff; color: var(--primary-dark); flex-shrink: 0;
+  width: 44px; height: 44px; border-radius: 50%; background: #fce4ec; color: var(--primary-dark); flex-shrink: 0;
   display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 18px; overflow: hidden;
 }
 .avatar img { width: 100%; height: 100%; object-fit: cover; }
@@ -116,7 +116,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid #7c4dff55; border
 .bars { display: flex; flex-direction: column; gap: 8px; }
 .bar-row { font-size: 13px; }
 .bar-row .bar-label { display: flex; justify-content: space-between; margin-bottom: 3px; }
-.bar-track { background: #f0ecf9; border-radius: 6px; height: 10px; overflow: hidden; }
+.bar-track { background: #f6e9ee; border-radius: 6px; height: 10px; overflow: hidden; }
 .bar-fill { height: 100%; background: var(--primary); border-radius: 6px; }
 .bar-fill.green { background: var(--green); } .bar-fill.red { background: var(--red); }
 .chart { display: flex; align-items: flex-end; gap: 8px; height: 150px; padding-top: 10px; }
@@ -163,3 +163,32 @@ input:focus, select:focus, textarea:focus { outline: 2px solid #7c4dff55; border
 .receipt .total { font-size: 18px; font-weight: 700; }
 .report-print table { width: 100%; border-collapse: collapse; } .report-print td, .report-print th { border: 1px solid #ccc; padding: 6px; text-align: right; }
 @media (min-width: 600px) { .stats { grid-template-columns: repeat(3, 1fr); } }
+
+.badge.purple { background: #ede4f7; color: var(--purple); }
+.brand-card { display: flex; gap: 12px; align-items: center; background: linear-gradient(135deg, #fff, #fdeef3); border-radius: var(--radius); padding: 12px; margin-bottom: 12px; box-shadow: 0 1px 3px #2d264012; }
+.brand-card img { width: 64px; height: 64px; }
+.brand-card .greet { font-weight: 700; font-size: 16px; }
+.slogan { color: #3f9b48; font-weight: 700; }
+.brand-card .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.banner { width: 100%; border-radius: var(--radius); margin-bottom: 12px; display: block; }
+.sched-mini { display: flex; gap: 10px; padding: 6px 0; border-bottom: 1px dashed var(--border); font-size: 14px; }
+.sched-mini:last-child { border-bottom: 0; }
+.sched-mini span { color: var(--muted); min-width: 92px; font-size: 12px; direction: ltr; text-align: right; }
+.day-tabs { display: flex; gap: 6px; overflow-x: auto; margin: 4px 0 10px; padding-bottom: 4px; }
+.day-tabs button { flex: 1 0 auto; border: 1px solid var(--border); background: #fff; border-radius: 20px; padding: 7px 12px; color: var(--muted); font-weight: 600; }
+.day-tabs button.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.sched-row .time { min-width: 92px; font-size: 12px; color: var(--purple); font-weight: 700; direction: ltr; text-align: right; }
+table.week { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 520px; }
+table.week th { background: #fce4ec; color: var(--primary-dark); padding: 6px; border: 1px solid var(--border); }
+table.week td { padding: 6px; border: 1px solid var(--border); vertical-align: top; }
+table.week td.t { white-space: nowrap; font-weight: 700; color: var(--purple); direction: ltr; }
+.checks { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; }
+.checks .lbl { width: 100%; color: var(--muted); }
+.checks label { display: flex; flex-direction: row; align-items: center; gap: 4px; color: var(--text); }
+.checks input { width: auto; }
+.print-head { display: flex; align-items: center; gap: 12px; border-bottom: 2px solid #d6336c; padding-bottom: 8px; margin-bottom: 8px; }
+.print-head img { width: 64px; height: 64px; flex-shrink: 0; }
+.print-head > div { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.print-head h2 { margin: 0; text-align: right; }
+.print-head .small { font-size: 12px; color: #555; }
+@media print { table.week { min-width: 0; font-size: 11px; } @page { margin: 10mm; } }
