@@ -21,10 +21,30 @@ android {
         }
     }
 
+    // توقيع ثابت: ملف التوقيع وباسورده متخزنين أسرار في GitHub (KEYSTORE_BASE64 و KEYSTORE_PASSWORD)
+    def ksPass = System.getenv('KEYSTORE_PASSWORD')
+    if (ksPass && !file('../baraem-release.jks').exists()) ksPass = null
+    signingConfigs {
+        if (ksPass) {
+            baraem {
+                storeFile file('../baraem-release.jks')
+                storePassword ksPass
+                keyAlias 'baraem'
+                keyPassword ksPass
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
+            if (ksPass) signingConfig signingConfigs.baraem
         }
+    }
+
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
     }
 
     compileOptions {

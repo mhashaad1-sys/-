@@ -5,7 +5,7 @@ const D = {};
 DB.STORES.forEach((s) => { D[s] = []; });
 
 const EXPENSE_CATEGORIES = ['إيجار', 'رواتب', 'سلف العاملين', 'أكل ووجبات', 'كهرباء ومياه وغاز', 'أدوات وألعاب', 'أدوات تعليمية وكتب', 'أدوات نظافة', 'صيانة', 'مواصلات', 'إنترنت وتليفون', 'دعاية وإعلان', 'أخرى'];
-const PAYMENT_TYPES = { monthly: 'اشتراك شهري', registration: 'رسوم تسجيل', uniform: 'زي وأدوات', books: 'كتب', bus: 'باص', activity: 'رحلة / نشاط / حفلة', other: 'أخرى' };
+const PAYMENT_TYPES = { monthly: 'اشتراك شهري', registration: 'رسوم تسجيل', uniform: 'زي وأدوات', books: 'كتب', bus: 'باص', activity: 'رحلة / نشاط / حفلة', homework: 'اشتراك منصة التمارين', other: 'أخرى' };
 const PAYMENT_METHODS = ['نقدي', 'فودافون كاش', 'إنستاباي', 'تحويل بنكي', 'أخرى'];
 const NOTE_KINDS = ['عام', 'صحة', 'وجبات', 'نوم', 'سلوك', 'تعليم', 'حادثة / إصابة'];
 const STAFF_ROLES = ['مديرة', 'مُعلِّمة', 'مُساعِدة', 'دادة', 'سائق', 'مشرفة باص', 'عامل/ة نظافة', 'طباخ/ة', 'محاسب', 'أخرى'];
@@ -16,7 +16,7 @@ const ATT_LABEL = { present: 'حاضر', late: 'متأخر', absent: 'غائب',
 const state = {
   tab: 'home', stack: [], attDate: today(), attClass: '', month: thisMonth(), finTab: 'payments',
   childSearch: '', childClass: '', childStatus: 'active', duesClass: '',
-  staffTab: 'list', staffAttDate: today(), schedClass: 'general', schedDay: DAY_INDEX[new Date().getDay()] ?? 0,
+  staffTab: 'list', staffAttDate: today(), repDate: today(), repClass: '', schedClass: 'general', schedDay: DAY_INDEX[new Date().getDay()] ?? 0,
   msgTpl: 0, msgText: '', msgTarget: 'all', msgSent: {},
   imp: { type: 'children', sheets: null, sheetIdx: 0, map: {}, fileName: '', result: null },
 };
@@ -97,7 +97,7 @@ async function remove(store, id) {
 }
 function famHook(store, obj) {
   if (store === 'children') queueFamily(obj.id);
-  else if (['attendance', 'payments', 'notes'].includes(store)) queueFamily(obj.childId);
+  else if (['attendance', 'payments', 'notes', 'reports'].includes(store)) queueFamily(obj.childId);
 }
 
 // الصلاحيات: finance (الفلوس)، staff (العاملين)، editChildren، manage (الإعدادات والمستخدمين)
@@ -168,6 +168,7 @@ function go(tab) { state.tab = tab; state.stack = []; render(); window.scrollTo(
 function push(view, params = {}) { state.stack.push({ view, ...params }); history.pushState({ d: state.stack.length }, ''); render(); window.scrollTo(0, 0); }
 function back() { if (!$('#modal').classList.contains('hidden')) { closeModal(); return; } if (state.stack.length) history.back(); }
 window.addEventListener('popstate', () => {
+  if (hwSession) { closeHomework(true); return; }
   if (!$('#modal').classList.contains('hidden')) { closeModal(); history.pushState({ d: state.stack.length }, ''); return; }
   if (state.stack.length) { state.stack.pop(); render(); }
 });
@@ -189,6 +190,7 @@ function render() {
   else html = (parent ? PARENT_VIEWS : TABS)[state.tab]();
   $('#pageTitle').textContent = title;
   $('#view').innerHTML = html;
+  syncReminders();
 }
 
 // ================== الرئيسية ==================
@@ -224,7 +226,7 @@ function viewHome() {
     <button data-action="goAttendance"><span>✅</span>الحضور</button>
     ${can('finance') ? `<button data-action="addPayment"><span>💵</span>تحصيل</button>
     <button data-action="addExpense"><span>🧾</span>مصروف</button>` : `<button data-action="addNote"><span>📝</span>ملاحظة</button>
-    <button data-action="goSchedule"><span>📅</span>الجدول</button>`}
+    <button data-action="goDaily"><span>📋</span>التقرير</button>`}
     <button data-action="goMessages"><span>💬</span>رسائل</button>
   </div>
   <div class="stats">
@@ -240,6 +242,7 @@ function viewHome() {
 
   ${Cloud.role && pendingRequests().length ? `<div class="card req-alert clickable" data-action="goRequests"><b>📨 ${num(pendingRequests().length)} طلب جديد من أولياء الأمور</b><div class="sub">${pendingRequests().slice(0, 3).map((r) => esc(`${(child(r.childId) || {}).name || r.childName || ''}: ${(REQUEST_TYPES[r.type] || {}).label || ''}`)).join(' · ')}</div></div>` : ''}
   ${(() => { const meds = activeChildren().filter((c) => activeMeds(c.id).length); return meds.length ? `<div class="alert">💊 أدوية النهارده: ${meds.map((c) => esc(c.name + ' (' + activeMeds(c.id).map((r) => r.medName + ' ' + (r.time || '')).join('، ') + ')')).join(' · ')}</div>` : ''; })()}
+  ${obligationsCard()}
   ${todaySchedule()}
 
   ${can('finance') ? `<div class="section-title"><h3>لم يدفعوا اشتراك ${monthLabel(m)} (${num(unpaid.length)})</h3>${unpaid.length ? '<button class="btn small" data-action="goDues">عرض الكل</button>' : ''}</div>
@@ -367,7 +370,8 @@ function viewAttendance() {
     <div class="btn-row"><span class="badge green">حاضر ${num(counts.present)}</span><span class="badge orange">متأخر ${num(counts.late)}</span>
     <span class="badge red">غائب ${num(counts.absent)}</span><span class="badge gray">لم يُسجَّل ${num(counts.none)}</span></div>
     <div class="btn-row" style="margin-top:10px"><button class="btn small green" data-action="allPresent">✔ الكل حاضر</button>
-    <button class="btn small" data-action="shareAttendance">📤 مشاركة كشف اليوم</button></div>
+    <button class="btn small" data-action="shareAttendance">📤 مشاركة كشف اليوم</button>
+    <button class="btn small primary" data-action="goDaily">📋 التقرير اليومي</button></div>
   </div>
   <div class="list">${kids.map((c) => {
     const a = attOf(d, c.id), st = a ? a.status : '';
@@ -834,7 +838,10 @@ function accountCard() {
 
 function viewMore() {
   const items = [
+    ['📋', 'التقرير اليومي', 'أكل، نوم، مزاج، نشاط — بيوصل لولي الأمر', 'goDaily'],
+    ['📚', 'منصة التمارين', 'التمارين والاشتراكات ومتابعة الأطفال', 'goHomework'],
     ['📅', 'الجدول الأسبوعي', 'جدول اليوم والأسبوع + مقترحات جاهزة', 'goSchedule'],
+    ['📌', 'الالتزامات الشهرية', 'الإيجار والمرتبات والمرافق + تنبيهات', 'goObligations'],
     ['🏫', 'الفصول / المجموعات', `${num(D.classes.length)} فصل`, 'goClasses'],
     ['📨', 'طلبات أولياء الأمور', `${num(pendingRequests().length)} طلب جديد`, 'goRequests'],
     ['📢', 'إعلانات لأولياء الأمور', 'تظهر في تطبيق الأهالي مع إشعار', 'goAnn'],
@@ -851,7 +858,7 @@ function viewMore() {
   ];
   const allowed = {
     goReports: can('finance'), goImport: can('manage'), exportExcel: can('finance'), goSettings: can('manage'),
-    exportData: can('manage'), importData: can('manage'), goRequests: !!Cloud.role, goAnn: !!Cloud.role, bulkParents: !!Cloud.role && can('manage'), goClasses: can('manage') || Cloud.role === 'teacher' || Cloud.role === 'accountant',
+    exportData: can('manage'), importData: can('manage'), goRequests: !!Cloud.role, goAnn: !!Cloud.role, goHomework: !!Cloud.role, goObligations: can('manage') || can('finance'), bulkParents: !!Cloud.role && can('manage'), goClasses: can('manage') || Cloud.role === 'teacher' || Cloud.role === 'accountant',
   };
   const shown = items.filter(([, , , a]) => allowed[a] !== false);
   return `${accountCard()}<div class="list menu-list">${shown.map(([ico, t, s, a]) => `<div class="item clickable" data-action="${a}"><div class="ico">${ico}</div><div class="main"><div class="title">${t}</div><div class="sub">${s}</div></div><span>‹</span></div>`).join('')}</div>
@@ -961,7 +968,9 @@ function viewSettings() {
       <label class="full">العنوان<input id="sAddress" value="${esc(s.address)}"></label>
       <label>السن المقبول<input id="sMinAge" value="${esc(s.minAge)}"></label>
       <label>رسوم التسجيل الافتراضية<input id="sRegFee" type="number" value="${esc(s.regFee)}"></label>
-      <label class="full">طرق الدفع (تظهر لأولياء الأمور)<textarea id="sPayInfo" rows="2" placeholder="مثال: فودافون كاش 010xxxxxxx · إنستاباي ...">${esc(s.payInfo || '')}</textarea></label>
+      <label>رقم إنستاباي<input id="sInsta" type="tel" dir="ltr" value="${esc(s.instapay || '')}"></label>
+      <label>اشتراك منصة التمارين (شهري)<input id="sHwPrice" type="number" value="${esc(s.hwPrice || 100)}"></label>
+      <label class="full">طرق دفع تانية (تظهر لأولياء الأمور)<textarea id="sPayInfo" rows="2" placeholder="مثال: فودافون كاش 010xxxxxxx · إنستاباي ...">${esc(s.payInfo || '')}</textarea></label>
       <div class="actions"><button class="btn primary" data-action="saveSettings">حفظ</button></div>
     </div></div>
     <div class="card"><h3>البيانات</h3>
@@ -1061,7 +1070,7 @@ function renderGate() {
 }
 
 const TABS = { home: viewHome, children: viewChildren, attendance: viewAttendance, finance: viewFinance, staff: viewStaffTab, more: viewMore };
-const VIEWS = { child: viewChildProfile, staffProfile: viewStaffProfile, classes: viewClasses, assign: viewAssign, reports: viewReports, settings: viewSettings, notes: viewNotes, schedule: viewSchedule, themes: viewThemes, messages: viewMessages, import: viewImport, about: viewAbout, members: viewMembers, requests: viewRequests, announcements: viewAnnouncements, bulkParents: viewBulkParents };
+const VIEWS = { child: viewChildProfile, staffProfile: viewStaffProfile, classes: viewClasses, assign: viewAssign, reports: viewReports, settings: viewSettings, notes: viewNotes, schedule: viewSchedule, themes: viewThemes, messages: viewMessages, import: viewImport, about: viewAbout, members: viewMembers, requests: viewRequests, announcements: viewAnnouncements, bulkParents: viewBulkParents, daily: viewDaily, homework: viewHomework, obligations: viewObligations };
 
 // ================== النماذج ==================
 function openModal(title, html) { $('#modalTitle').textContent = title; $('#modalBody').innerHTML = html; $('#modal').classList.remove('hidden'); }
@@ -1430,6 +1439,29 @@ const ACTIONS = {
   logout: async () => { if (confirm('تسجيل خروج من الموبايل ده؟\nالبيانات محفوظة على السيرفر وهترجع لما تسجل دخول تاني.')) await Cloud.logout(); },
   retry: () => location.reload(),
   pickKid: (el) => { state.kid = el.dataset.id; render(); },
+  goDaily: () => { state.repDate = today(); push('daily'); },
+  repSet: (el) => setReport(el.dataset.id, el.dataset.f, el.dataset.v),
+  repTemplate: () => repTemplateForm(),
+  copy: (el) => copyText(el.dataset.t),
+  openInsta,
+  goObligations: () => push('obligations'),
+  payObligation: (el) => payObligation(el.dataset.id),
+  editObligation: (el) => obligationForm(obligations().find((o) => o.id === el.dataset.id)),
+  goHomework: () => { state.hwTab = 'items'; push('homework'); },
+  hwTab: (el) => { state.hwTab = el.dataset.t; render(); },
+  openHw: (el) => openHomework(el.dataset.id),
+  hwLocked: () => toast('🔒 اشترك عشان تفتح كل التمارين'),
+  closeHw: () => closeHomework(false),
+  hwUpload: () => { const i = document.createElement('input'); i.type = 'file'; i.accept = '.html,.htm,text/html'; i.onchange = () => i.files[0] && hwUploadFile(i.files[0]); i.click(); },
+  hwEdit: (el) => hwEditForm(D.homework.find((x) => x.id === el.dataset.id)),
+  hwActivate: (el) => hwActivate(el.dataset.id, true),
+  hwProgDetail: (el) => hwProgDetail(D.hwProg.find((x) => x.id === el.dataset.id)),
+  hwSubscribe: async () => {
+    const k = curKid();
+    if (!confirm(`تأكيد إنك حوّلت ${money(hwPrice())} على إنستاباي لاشتراك ${k.name} في منصة التمارين؟`)) return;
+    try { await Cloud.sendRequest({ type: 'hwsub', childId: k.id, childName: k.name, reason: `حوّلت ${money(hwPrice())} على إنستاباي` }); toast('تم إرسال الطلب ✅ هيتفعل بعد المراجعة'); }
+    catch (e) { toast(authMsg(e)); }
+  },
   pTab: (el) => go(el.dataset.t),
   newReq: (el) => requestForm(el.dataset.type),
   cancelReq: async (el) => {
@@ -1560,7 +1592,7 @@ const ACTIONS = {
   },
   shareAbout: () => shareText(aboutText()),
   saveSettings: async () => {
-    await saveSettings({ name: $('#sName').value.trim() || DEFAULT_SETTINGS.name, slogan: $('#sSlogan').value.trim(), phone: $('#sPhone').value.trim(), currency: $('#sCurrency').value.trim() || 'ج.م', address: $('#sAddress').value.trim(), minAge: $('#sMinAge').value.trim(), regFee: Number($('#sRegFee').value) || '', payInfo: $('#sPayInfo').value.trim() });
+    await saveSettings({ name: $('#sName').value.trim() || DEFAULT_SETTINGS.name, slogan: $('#sSlogan').value.trim(), phone: $('#sPhone').value.trim(), currency: $('#sCurrency').value.trim() || 'ج.م', address: $('#sAddress').value.trim(), minAge: $('#sMinAge').value.trim(), regFee: Number($('#sRegFee').value) || '', payInfo: $('#sPayInfo').value.trim(), instapay: $('#sInsta').value.trim(), hwPrice: Number($('#sHwPrice').value) || 100 });
     toast('تم حفظ الإعدادات ✅'); render();
   },
   importData: () => $('#importFile').click(),
@@ -1608,6 +1640,9 @@ document.addEventListener('change', async (e) => {
   else if (id === 'attDate') { state.attDate = t.value || today(); render(); }
   else if (id === 'attClass') { state.attClass = t.value; render(); }
   else if (id === 'staffAttDate') { state.staffAttDate = t.value || today(); render(); }
+  else if (id === 'repDate') { state.repDate = t.value || today(); render(); }
+  else if (id === 'repClass') { state.repClass = t.value; render(); }
+  else if (t.dataset.rep) { const d = state.repDate, cid = t.dataset.rep, old = repOf(d, cid) || { id: `${d}_${cid}`, date: d, childId: cid }; await save('reports', { ...old, [t.dataset.f]: t.value.trim() }); }
   else if (id === 'duesClass') { state.duesClass = t.value; render(); }
   else if (id === 'monthPick') { state.month = t.value || thisMonth(); render(); }
   else if (id === 'schedClass') { state.schedClass = t.value; render(); }
@@ -1625,6 +1660,7 @@ $('#backBtn').addEventListener('click', back);
 window.addEventListener('afterprint', () => { $('#printArea').innerHTML = ''; });
 // يستدعيه تطبيق الأندرويد عند الضغط على زر الرجوع؛ يرجع false لو مفيش حاجة نرجع لها
 window.nurseryBack = () => {
+  if (hwSession) { closeHomework(false); return true; }
   if (!$('#modal').classList.contains('hidden')) { closeModal(); return true; }
   if (state.stack.length) { history.back(); return true; }
   if (state.tab !== 'home') { go('home'); return true; }

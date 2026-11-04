@@ -9,6 +9,7 @@ const REQUEST_TYPES = {
   early: { label: 'خروج بدري', icon: '⏰', fields: [['from', 'اليوم', 'date', true], ['time', 'الساعة', 'time', true], ['reason', 'السبب', 'textarea']] },
   pickup: { label: 'حد تاني هيستلم الطفل', icon: '🧍', fields: [['from', 'اليوم', 'date', true], ['person', 'اسم الشخص وصلته بالطفل', 'text', true], ['phone', 'تليفونه', 'tel']] },
   note: { label: 'ملاحظة / طلب خاص', icon: '📝', fields: [['reason', 'اكتب الملاحظة', 'textarea', true]] },
+  hwsub: { label: 'اشتراك منصة التمارين', icon: '📚', hidden: true, fields: [['reason', 'ملاحظة (مثال: حوّلت من رقم ...)', 'textarea']] },
 };
 const REQ_STATUS = { pending: ['في الانتظار', 'orange'], approved: ['تمت الموافقة', 'green'], rejected: ['مرفوض', 'red'], cancelled: ['ملغي', 'gray'] };
 const isParent = () => Cloud.role === 'parent';
@@ -60,6 +61,8 @@ function parentNotify(kind, cid, before, after) {
     }
     const d = today(), a0 = (before.att || {})[d], a1 = (after.att || {})[d];
     if (a1 && (!a0 || a0.s !== a1.s)) sysNotify(`${a1.s === 'absent' ? '❌' : '✅'} ${name}`, a1.s === 'absent' ? 'متسجل غياب النهارده' : `وصل الحضانة${a1.i ? ' الساعة ' + a1.i : ''}`);
+    const r0 = (before.reports || {})[d], r1 = (after.reports || {})[d];
+    if (r1 && !r0) sysNotify(`📋 تقرير ${name} النهارده وصل`, reportText({ ...r1, date: d }, name).split('\n').slice(1, 4).join(' · '));
     if (a1 && a1.o && (!a0 || !a0.o)) sysNotify(`🚪 ${name}`, `خرج من الحضانة الساعة ${a1.o}`);
     const fb = famBalance(before), fa = famBalance(after);
     if (fa && fb && fa.payments > fb.payments) sysNotify('💵 تم استلام دفعة', `شكرًا لحضرتك — ${name}`);
@@ -84,6 +87,8 @@ function publishFamily(cid) {
   const data = {
     childId: cid, name: c.name, className: className(c.classId), photo: c.photo || '', birthDate: c.birthDate || '', gender: c.gender || '',
     medical: c.medical || '', pickup: c.pickup || '', active: c.active !== false, classId: c.classId || '', att,
+    hw: { until: c.hwUntil || '' },
+    reports: Object.fromEntries(D.reports.filter((r) => r.childId === cid && r.date >= cutoff.slice(0, 8) + '01').map((r) => { const x = { ...r }; delete x.id; delete x.childId; return [r.date, x]; })),
     notes: D.notes.filter((n) => n.childId === cid && n.share !== false).sort((a, b) => (b.date + b.id).localeCompare(a.date + a.id)).slice(0, 30).map((n) => ({ d: n.date, k: n.kind, t: n.text })),
   };
   if (can('finance')) {
@@ -107,7 +112,7 @@ function famBalance(k) {
 }
 
 // ================== شاشات ولي الأمر ==================
-const PARENT_TABS = [['pHome', '🏠', 'الرئيسية'], ['pAtt', '📅', 'الحضور'], ['pReq', '📨', 'الطلبات'], ['pFees', '💵', 'المصاريف'], ['pMore', '☰', 'المزيد']];
+const PARENT_TABS = [['pHome', '🏠', 'الرئيسية'], ['pAtt', '📅', 'الحضور'], ['pHw', '📚', 'التمارين'], ['pReq', '📨', 'الطلبات'], ['pFees', '💵', 'المصاريف'], ['pMore', '☰', 'المزيد']];
 function famKids() { return (Cloud.childIds || []).map((id) => ({ ...(Cloud.fam[id] || {}), id })); }
 function curKid() { const ks = famKids(); return ks.find((k) => k.id === state.kid) || ks[0] || { id: '' }; }
 function kidSwitcher() {
@@ -138,8 +143,10 @@ function viewPHome() {
     <h2>${esc(k.name)}</h2><div class="sub">${[k.className && k.className !== 'بدون فصل' ? esc(k.className) : '', k.birthDate ? age(k.birthDate) : ''].filter(Boolean).join(' · ')}</div>
     <div style="margin-top:6px">${a ? (a.s === 'absent' ? `<span class="badge red">❌ غائب النهارده${a.e ? ' (بإذن)' : ''}</span>` : `<span class="badge green">✅ في الحضانة${a.i ? ' من ' + a.i : ''}</span>${a.o ? ` <span class="badge blue">🚪 خرج ${a.o}</span>` : ''}`) : '<span class="badge gray">لسه ما اتسجلش حضور النهارده</span>'}</div>
   </div></div></div>
-  ${fb && fb.balance > 0 ? `<div class="card due-card"><b>💵 مستحق على ${esc(k.name)}: ${money(fb.balance)}</b>${s.payInfo ? `<div class="sub" style="white-space:pre-wrap;margin-top:6px">${esc(s.payInfo)}</div>` : ''}
-    <div class="btn-row" style="margin-top:8px"><button class="btn small" data-action="pTab" data-t="pFees">التفاصيل</button></div></div>` : ''}
+  ${fb && fb.balance > 0 ? `<div class="card due-card">${new Date().getDate() <= 10 && fb.thisRemaining ? `<div class="month-hello">🌸 أهلاً بشهر ${new Date().toLocaleDateString('ar-EG', { month: 'long' })}</div>` : ''}
+    <b>💵 مستحق على ${esc(k.name)}: ${money(fb.balance)}</b>
+    ${instaCard(k.name, fb.balance)}${s.payInfo ? `<div class="sub" style="white-space:pre-wrap;margin-top:6px">${esc(s.payInfo)}</div>` : ''}</div>` : ''}
+  ${(k.reports || {})[t] ? `<div class="card rep-view"><h3>📋 تقرير ${esc(k.name)} النهارده</h3>${repViewHTML((k.reports || {})[t])}</div>` : ''}
   <div class="quick">
     <button data-action="newReq" data-type="absence"><span>🏠</span>طلب غياب</button>
     <button data-action="newReq" data-type="medicine"><span>💊</span>دواء</button>
@@ -190,7 +197,7 @@ function viewPAtt() {
   <div class="card"><div class="cal">${['سبت', 'أحد', 'اتنين', 'تلات', 'أربع', 'خميس', 'جمعة'].map((d) => `<div class="cal-h">${d}</div>`).join('')}${cells.join('')}</div>
     <div class="legend"><span><i style="background:var(--green)"></i>حاضر</span><span><i style="background:var(--orange)"></i>متأخر</span><span><i style="background:var(--red)"></i>غائب</span></div></div>
   <div class="list">${Object.entries(att).filter(([d]) => d.startsWith(m)).sort((a, b) => b[0].localeCompare(a[0])).map(([d, v]) => `<div class="item"><div class="main"><div class="title">${dateLabel(d)}</div>
-    <div class="sub">${v.i ? 'دخول ' + v.i : ''}${v.o ? ' · خروج ' + v.o : ''}${v.e ? ' · ' + esc(v.e) : ''}</div></div><span class="badge ${{ present: 'green', late: 'orange', absent: 'red' }[v.s]}">${ATT_LABEL[v.s]}</span></div>`).join('') || '<div class="empty">مفيش حضور متسجل في الشهر ده</div>'}</div>`;
+    <div class="sub">${v.i ? 'دخول ' + v.i : ''}${v.o ? ' · خروج ' + v.o : ''}${v.e ? ' · ' + esc(v.e) : ''}</div>${(k.reports || {})[d] ? repViewHTML(k.reports[d], true) : ''}</div><span class="badge ${{ present: 'green', late: 'orange', absent: 'red' }[v.s]}">${ATT_LABEL[v.s]}</span></div>`).join('') || '<div class="empty">مفيش حضور متسجل في الشهر ده</div>'}</div>`;
 }
 
 function viewPReq() {
@@ -198,7 +205,7 @@ function viewPReq() {
   markSeen('req');
   const list = [...(Cloud.req[k.id] || [])].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
   return `${kidSwitcher()}
-  <div class="card"><h3>طلب جديد لـ ${esc(k.name || '')}</h3><div class="req-types">${Object.entries(REQUEST_TYPES).map(([key, t]) => `<button class="btn" data-action="newReq" data-type="${key}">${t.icon} ${t.label}</button>`).join('')}</div></div>
+  <div class="card"><h3>طلب جديد لـ ${esc(k.name || '')}</h3><div class="req-types">${Object.entries(REQUEST_TYPES).filter(([, t]) => !t.hidden).map(([key, t]) => `<button class="btn" data-action="newReq" data-type="${key}">${t.icon} ${t.label}</button>`).join('')}</div></div>
   <div class="section-title"><h3>طلباتي</h3></div>
   <div class="list">${list.map((r) => reqRow(r, false)).join('') || '<div class="empty">مفيش طلبات</div>'}</div>`;
 }
@@ -212,7 +219,8 @@ function viewPFees() {
     <div class="stat ${fb.thisRemaining ? 'red' : 'green'}"><div class="label">${monthLabel(thisMonth())}</div><div class="value">${fb.thisRemaining ? 'باقي ' + money(fb.thisRemaining) : 'مدفوع ✅'}</div></div>
     <div class="stat ${fb.balance ? 'red' : 'green'}"><div class="label">إجمالي المستحق</div><div class="value">${money(fb.balance)}</div></div>
   </div>
-  ${s.payInfo ? `<div class="card"><h3>💳 طرق الدفع</h3><div style="white-space:pre-wrap">${esc(s.payInfo)}</div></div>` : ''}
+  ${fb.balance > 0 ? instaCard(k.name, fb.balance) : ''}
+  ${s.payInfo ? `<div class="card"><h3>💳 طرق دفع تانية</h3><div style="white-space:pre-wrap">${esc(s.payInfo)}</div></div>` : ''}
   <div class="section-title"><h3>المدفوعات</h3></div>
   <div class="list">${(k.fin.payments || []).map((p) => `<div class="item"><div class="main"><div class="title">${esc(p.t)}${p.m ? ' · ' + monthLabel(p.m) : ''}</div>
     <div class="sub">${dateLabel(p.d)}${p.w ? ' · ' + esc(p.w) : ''}${p.r ? ' · إيصال #' + num(p.r) : ''}</div></div><div class="amount in">${money(p.a)}</div></div>`).join('') || '<div class="empty">مفيش مدفوعات متسجلة</div>'}</div>`;
@@ -274,6 +282,7 @@ function decideForm(r) {
   openModal(`${t.icon} ${t.label} - ${c ? c.name : r.childName || ''}`, `<div class="card" style="white-space:pre-wrap">${esc(reqDetails(r))}</div>
     <div class="form"><label class="full">رد على ولي الأمر (اختياري)<textarea id="reqReply" rows="2"></textarea></label>
     ${r.type === 'absence' ? '<p class="sub full" style="color:var(--muted)">الموافقة هتسجل الطفل "غائب بإذن" في الأيام دي تلقائيًا.</p>' : ''}
+    ${r.type === 'hwsub' ? `<p class="sub full" style="color:var(--muted)">اتأكد إن التحويل (${money(hwPrice())}) وصل على إنستاباي. الموافقة هتفعّل المنصة شهر وتسجّل الدفعة.</p>` : ''}
     ${r.type === 'medicine' ? '<p class="sub full" style="color:var(--muted)">الموافقة هتظهر الدواء 💊 جنب اسم الطفل في الحضور طول المدة.</p>' : ''}
     <div class="actions"><button class="btn green" data-action="reqDecision" data-id="${r.id}" data-st="approved">✔ موافقة</button>
     <button class="btn danger" data-action="reqDecision" data-id="${r.id}" data-st="rejected">✗ رفض</button></div></div>`);
@@ -281,6 +290,7 @@ function decideForm(r) {
 
 async function reqDecision(id, status) {
   const r = D.requests.find((x) => x.id === id); if (!r) return;
+  if (r.type === 'hwsub' && status === 'approved' && !can('manage')) { toast('تفعيل الاشتراك للمدير بس'); return; }
   const reply = ($('#reqReply') || {}).value || '';
   await save('requests', { ...r, status, reply: reply.trim(), decidedBy: Cloud.name || Cloud.email || 'الحضانة', decidedAt: new Date().toISOString() });
   if (status === 'approved' && r.type === 'absence' && r.from) {
@@ -291,6 +301,10 @@ async function reqDecision(id, status) {
       if (d.getDay() === 5) continue; // الجمعة
       await save('attendance', { id: `${ds}_${r.childId}`, date: ds, childId: r.childId, status: 'absent', checkIn: '', checkOut: '', excuse: r.reason || 'بإذن' });
     }
+  }
+  if (r.type === 'hwsub' && status === 'approved') {
+    if (!can('manage')) { toast('التفعيل للمدير بس'); return; }
+    await hwActivate(r.childId, false);
   }
   if (r.type === 'medicine' && status === 'approved') {
     const c = child(r.childId);
@@ -395,4 +409,9 @@ function parentSection(c) {
        <button class="btn small primary" style="margin-top:8px" data-action="makeParent" data-id="${c.id}">+ عمل حساب لولي الأمر</button>`}</div>`;
 }
 
-Object.assign(globalThis, { PARENT_VIEWS: { pHome: viewPHome, pAtt: viewPAtt, pReq: viewPReq, pFees: viewPFees, pMore: viewPMore } });
+Object.assign(globalThis, { PARENT_VIEWS: { pHw: (...a) => viewPHw(...a), pHome: viewPHome, pAtt: viewPAtt, pReq: viewPReq, pFees: viewPFees, pMore: viewPMore } });
+
+function repViewHTML(r, compact) {
+  const items = Object.keys(REPORT_FIELDS).filter((f) => r[f]).map((f) => `<span class="rep-chip">${REPORT_FIELDS[f].icon} ${REPORT_FIELDS[f].label}: <b>${esc(optLabel(f, r[f]))}</b></span>`);
+  return `<div class="rep-chips${compact ? ' compact' : ''}">${items.join('')}</div>${r.activity ? `<div class="sub">🎨 ${esc(r.activity)}</div>` : ''}${r.note ? `<div class="sub">📝 ${esc(r.note)}</div>` : ''}`;
+}

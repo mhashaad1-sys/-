@@ -9,6 +9,9 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.pm.PackageManager;
 import android.os.Build;
+import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
+import java.util.Locale;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.net.Uri;
@@ -49,6 +52,8 @@ public class MainActivity extends Activity {
     private WebView webView;
     private ValueCallback<Uri[]> fileCallback;
     private byte[] pendingSaveContent;
+    private TextToSpeech tts;
+    private boolean ttsReady = false;
 
     @SuppressLint({"SetJavaScriptEnabled", "AddJavascriptInterface"})
     @Override
@@ -66,10 +71,13 @@ public class MainActivity extends Activity {
         s.setAllowContentAccess(true);
         s.setTextZoom(100);
 
-        if (Build.VERSION.SDK_INT >= 26) {
-            NotificationChannel ch = new NotificationChannel("baraem", "إشعارات الحضانة", NotificationManager.IMPORTANCE_HIGH);
-            getSystemService(NotificationManager.class).createNotificationChannel(ch);
-        }
+        Reminders.ensureChannel(this);
+        tts = new TextToSpeech(this, status -> ttsReady = status == TextToSpeech.SUCCESS);
+        tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+            @Override public void onStart(String id) { }
+            @Override public void onDone(String id) { ttsDone(id); }
+            @Override public void onError(String id) { ttsDone(id); }
+        });
         webView.addJavascriptInterface(new Bridge(), "Android");
         webView.setWebViewClient(new LocalClient());
         webView.setWebChromeClient(new Chrome());
@@ -79,6 +87,16 @@ public class MainActivity extends Activity {
         } else {
             webView.loadUrl(START_URL);
         }
+    }
+
+    private void ttsDone(String id) {
+        runOnUiThread(() -> webView.evaluateJavascript("window.__ttsDone && window.__ttsDone('" + id.replaceAll("[^A-Za-z0-9_]", "") + "')", null));
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (tts != null) tts.shutdown();
+        super.onDestroy();
     }
 
     @Override
@@ -257,6 +275,44 @@ public class MainActivity extends Activity {
                         .setStyle(new Notification.BigTextStyle().bigText(body)).setAutoCancel(true).setContentIntent(pi);
                 NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
                 nm.notify((int) (System.currentTimeMillis() % 1000000), b.build());
+            });
+        }
+
+        @JavascriptInterface
+        public void speak(String id, String text, String lang, double rate, double pitch) {
+            if (!ttsReady) { ttsDone(id); return; }
+            Locale loc = Locale.forLanguageTag(lang);
+            if (tts.isLanguageAvailable(loc) < TextToSpeech.LANG_AVAILABLE) loc = lang.startsWith("en") ? Locale.US : new Locale("ar");
+            tts.setLanguage(loc);
+            tts.setSpeechRate((float) Math.max(0.3, Math.min(2.0, rate)));
+            tts.setPitch((float) Math.max(0.5, Math.min(2.0, pitch)));
+            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, id);
+        }
+
+        @JavascriptInterface
+        public void stopSpeak() {
+            if (tts != null) tts.stop();
+        }
+
+        @JavascriptInterface
+        public void setReminders(String json) {
+            Reminders.save(MainActivity.this, json);
+        }
+
+        @JavascriptInterface
+        public void copy(String text) {
+            runOnUiThread(() -> {
+                android.content.ClipboardManager cm = (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                cm.setPrimaryClip(android.content.ClipData.newPlainText("baraem", text));
+            });
+        }
+
+        @JavascriptInterface
+        public void openApp(String pkg) {
+            runOnUiThread(() -> {
+                Intent i = getPackageManager().getLaunchIntentForPackage(pkg);
+                if (i != null) startActivity(i);
+                else openExternal(Uri.parse("https://play.google.com/store/apps/details?id=" + pkg));
             });
         }
 

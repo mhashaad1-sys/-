@@ -20,16 +20,17 @@ service cloud.firestore {
     function isParent() { return hasRole('parent'); }
     function isStaff() { return isAdmin() || isAccountant() || isTeacher(); }
     function myKids() { return get(memberPath()).data.childIds; }
+    function hwActive() { return isParent() && get(memberPath()).data.get('hwUntil', 0) > request.time.toMillis(); }
 
     function canRead(c) {
       return isAdmin()
-        || ((isAccountant() || isTeacher()) && c in ['settings', 'classes', 'children', 'attDays', 'notes', 'schedule', 'requests', 'announcements'])
+        || ((isAccountant() || isTeacher()) && c in ['settings', 'classes', 'children', 'attDays', 'notes', 'schedule', 'requests', 'announcements', 'repDays', 'homework', 'hwProg'])
         || (isAccountant() && c in ['payments', 'expenses', 'staff', 'staffTx', 'staffAttDays'])
-        || (isParent() && c in ['settings', 'schedule', 'announcements']);
+        || (isParent() && c in ['settings', 'schedule', 'announcements', 'homework']);
     }
     function canWrite(c) {
       return isAdmin()
-        || ((isAccountant() || isTeacher()) && c in ['attDays', 'notes', 'schedule', 'requests'])
+        || ((isAccountant() || isTeacher()) && c in ['attDays', 'notes', 'schedule', 'requests', 'repDays'])
         || (isAccountant() && c in ['children', 'payments', 'expenses', 'staff', 'staffTx']);
     }
 
@@ -57,6 +58,21 @@ service cloud.firestore {
         && request.resource.data.status == 'pending' && request.resource.data.by == request.auth.token.email.lower();
       allow update: if isParent() && resource.data.childId in myKids() && resource.data.status == 'pending'
         && request.resource.data.status == 'cancelled' && request.resource.data.childId == resource.data.childId;
+    }
+
+    // ملفات التمارين: لولي الأمر المشترك، أو لو الملف مجاني للتجربة
+    match /org/baraem/hwChunks/{id} {
+      allow read: if isStaff() || (isParent() && (resource.data.free == true || hwActive()));
+      allow write: if isAdmin();
+    }
+    // تقدم الطفل في التمارين: ولي الأمر بيكتبه لطفله بس، والحضانة بتقرأه
+    match /org/baraem/hwState/{id} {
+      allow read: if isStaff() || (isParent() && (resource == null || resource.data.childId in myKids()));
+      allow write: if isParent() && request.resource.data.childId in myKids() && (resource == null || resource.data.childId in myKids());
+    }
+    match /org/baraem/hwProg/{id} {
+      allow read: if isParent() && (resource == null || resource.data.childId in myKids());
+      allow write: if isParent() && request.resource.data.childId in myKids() && (resource == null || resource.data.childId in myKids());
     }
 
     match /org/baraem/{col}/{id} {

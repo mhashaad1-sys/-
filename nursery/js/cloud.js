@@ -14,8 +14,8 @@ const FIREBASE_CONFIG = {
 const ORG_ID = 'baraem';
 
 const ROLES = { owner: 'صاحبة الحضانة', admin: 'مدير/ة', accountant: 'محاسب/ة', teacher: 'معلمة / مشرفة', parent: 'ولي أمر' };
-const ALL_STORES = ['settings', 'classes', 'children', 'attendance', 'payments', 'expenses', 'staff', 'notes', 'staffAtt', 'staffTx', 'schedule', 'requests', 'announcements'];
-const BASIC_STORES = ['settings', 'classes', 'children', 'attendance', 'notes', 'schedule', 'requests', 'announcements'];
+const ALL_STORES = ['settings', 'classes', 'children', 'attendance', 'payments', 'expenses', 'staff', 'notes', 'staffAtt', 'staffTx', 'schedule', 'requests', 'announcements', 'reports', 'homework', 'hwProg'];
+const BASIC_STORES = ['settings', 'classes', 'children', 'attendance', 'notes', 'schedule', 'requests', 'announcements', 'reports', 'homework', 'hwProg'];
 const CLOUD_READ = {
   admin: ALL_STORES,
   accountant: [...BASIC_STORES, 'payments', 'expenses', 'staff', 'staffTx', 'staffAtt'],
@@ -24,8 +24,8 @@ const CLOUD_READ = {
 };
 const CLOUD_WRITE = {
   admin: ALL_STORES,
-  accountant: ['attendance', 'notes', 'schedule', 'requests', 'children', 'payments', 'expenses', 'staff', 'staffTx'],
-  teacher: ['attendance', 'notes', 'schedule', 'requests'],
+  accountant: ['attendance', 'notes', 'schedule', 'requests', 'reports', 'children', 'payments', 'expenses', 'staff', 'staffTx'],
+  teacher: ['attendance', 'notes', 'schedule', 'requests', 'reports'],
   parent: [],
 };
 // حسابات أولياء الأمور بتتعمل برقم الموبايل (بيتحول لإيميل داخلي)
@@ -34,7 +34,7 @@ const toDigits = (p) => String(p || '').replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥
 const parentEmail = (phone) => `${toDigits(phone)}@${PARENT_DOMAIN}`;
 const loginEmail = (id) => (String(id).includes('@') ? String(id).trim() : parentEmail(id));
 // الحضور بيتخزن على السيرفر مستند واحد لكل يوم (أوفر بكتير من مستند لكل طفل)
-const DAY_STORES = { attendance: { col: 'attDays', key: 'childId' }, staffAtt: { col: 'staffAttDays', key: 'staffId' } };
+const DAY_STORES = { attendance: { col: 'attDays', key: 'childId' }, staffAtt: { col: 'staffAttDays', key: 'staffId' }, reports: { col: 'repDays', key: 'childId' } };
 const cloudCol = (s) => (DAY_STORES[s] ? DAY_STORES[s].col : s);
 const LS = {
   get(k) { try { return localStorage.getItem('baraem_' + k); } catch (e) { return null; } },
@@ -45,7 +45,7 @@ const clean = (o) => JSON.parse(JSON.stringify(o));
 
 const Cloud = {
   ready: false, user: null, role: null, email: '', name: '', status: 'local', error: '',
-  childIds: [], fam: {}, req: {}, loaded: {},
+  childIds: [], fam: {}, req: {}, hwProg: {}, loaded: {},
   unsubs: [], pending: false, queue: Promise.resolve(), onChange: () => {},
 
   init(onChange) {
@@ -307,6 +307,10 @@ const Cloud = {
     this.unsubs.push(this.col('settings').onSnapshot(intoD('settings'), onErr));
     this.unsubs.push(this.col('schedule').onSnapshot(intoD('schedule'), onErr));
     this.unsubs.push(this.col('announcements').onSnapshot(intoD('announcements'), onErr));
+    this.unsubs.push(this.col('homework').onSnapshot(intoD('homework'), onErr));
+    for (const cid of this.childIds) {
+      this.unsubs.push(this.col('hwProg').where('childId', '==', cid).onSnapshot((q) => { q.docs.forEach((x) => { this.hwProg[x.id] = x.data(); }); this.onChange('data'); }, onErr));
+    }
     this.onChange('status');
   },
   async sendRequest(data) {

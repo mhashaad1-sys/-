@@ -9,6 +9,8 @@ const DEFAULT_SETTINGS = {
   currency: 'ج.م',
   regFee: '',
   minAge: 'من سن سنتين',
+  instapay: '01007143995',
+  hwPrice: 100,
 };
 
 // قائمة الأطفال من ملف الإكسيل (الاسم، المصاريف الشهرية، النوع)

@@ -1,7 +1,7 @@
 // طبقة التخزين المحلي (IndexedDB) - كل البيانات على الجهاز فقط
 const DB_NAME = 'nursery-db';
-const DB_VERSION = 3;
-const STORES = ['settings', 'classes', 'children', 'attendance', 'payments', 'expenses', 'staff', 'notes', 'staffAtt', 'staffTx', 'schedule', 'requests', 'announcements'];
+const DB_VERSION = 4;
+const STORES = ['settings', 'classes', 'children', 'attendance', 'payments', 'expenses', 'staff', 'notes', 'staffAtt', 'staffTx', 'schedule', 'requests', 'announcements', 'reports', 'homework', 'hwProg'];
 
 let _db = null;
 
