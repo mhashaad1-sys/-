@@ -1484,10 +1484,17 @@ const ACTIONS = {
     const upd = { ...c }; delete upd.parentLogin; await save('children', upd); render();
   },
   bulkParents,
+  phonesTemplate: () => {
+    const rows = [['اسم الطالب', 'التليفون', 'اسم ولي الأمر'], ...activeChildren().map((c) => [c.name, c.phone || '', c.guardianName || ''])];
+    saveBlob('ارقام-اولياء-الامور.xlsx', XLSX.write([{ name: 'أرقام أولياء الأمور', rows }]));
+    closeModal();
+    setTimeout(() => { state.imp.type = 'children'; state.imp.result = null; push('import'); toast('بعد ما تكتب الأرقام ارفع الملف من هنا 👇'); }, 400);
+  },
   goMembers: () => { state.members = null; push('members'); loadMembers(); },
   addMember: () => memberForm(null),
   editMember: (el) => memberForm((state.members || []).find((m) => m.email === el.dataset.email)),
-  closeModal, doPrint, exportExcel, exportData, runImport,
+  closeModal: (el) => { closeModal(); if (el && el.dataset && el.dataset.then) go(el.dataset.then); },
+  doPrint, exportExcel, exportData, runImport,
   goAttendance: () => go('attendance'),
   goDues: () => { state.finTab = 'dues'; state.month = thisMonth(); go('finance'); },
   goClasses: () => push('classes'), goReports: () => push('reports'), goSettings: () => push('settings'), goNotes: () => push('notes'),

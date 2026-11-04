@@ -370,7 +370,18 @@ function parentForm(c) {
 }
 async function bulkParents() {
   const kids = activeChildren().filter((c) => c.phone && !c.parentLogin);
-  if (!kids.length) { toast('كل الأطفال اللي ليهم رقم عندهم حسابات بالفعل'); return; }
+  if (!kids.length) {
+    const all = activeChildren(), noPhone = all.filter((c) => !c.phone), linked = all.filter((c) => c.parentLogin);
+    openModal('حسابات أولياء الأمور', `<div class="card">
+      <p>✅ عندهم حساب: <b>${num(linked.length)}</b> طفل</p>
+      <p>📞 من غير رقم تليفون: <b style="color:var(--red)">${num(noPhone.length)}</b> طفل</p></div>
+      ${noPhone.length ? `<p>عشان نعمل حساب لولي الأمر لازم رقم موبايله يكون متسجل. ضيف الأرقام بطريقة من دول:</p>
+      <div class="list"><div class="item clickable" data-action="phonesTemplate"><div class="avatar">📥</div><div class="main"><div class="title">ملف إكسيل جاهز بأسماء الأطفال</div>
+        <div class="sub">نزّل الملف، اكتب رقم كل ولي أمر جنب اسم الطفل، وارفعه من "استيراد من إكسيل"</div></div></div>
+      <div class="item clickable" data-action="closeModal" data-then="children"><div class="avatar">✏️</div><div class="main"><div class="title">من صفحة كل طفل</div>
+        <div class="sub">الأطفال ← اختار الطفل ← تعديل ← تليفون ولي الأمر</div></div></div></div>` : '<p>كل الأطفال عندهم حسابات 👏</p>'}`);
+    return;
+  }
   if (!confirm(`هيتعمل حساب لـ ${kids.length} ولي أمر (اللي ليهم رقم تليفون)، وبعدها تبعتلهم بيانات الدخول على الواتساب. متابعة؟`)) return;
   const done = [];
   for (const c of kids) {
