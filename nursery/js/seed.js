@@ -11,6 +11,8 @@ const DEFAULT_SETTINGS = {
   minAge: 'من سن سنتين',
   instapay: '01007143995',
   hwPrice: 100,
+  webUrl: 'https://mhashaad1-sys.github.io/-/',
+  apkUrl: 'https://github.com/mhashaad1-sys/-/releases/latest/download/nursery-app.apk',
 };
 
 // قائمة الأطفال من ملف الإكسيل (الاسم، المصاريف الشهرية، النوع)

@@ -1,5 +1,5 @@
-const CACHE_NAME = 'baraem-cache-v5';
-const ASSETS = ['./', './index.html', './manifest.json', './css/style.css', './js/db.js', './js/seed.js', './js/xlsx.js', './js/cloud.js', './js/family.js', './js/extras.js', './js/homework.js', './vendor/firebase-app-compat.js', './vendor/firebase-auth-compat.js', './vendor/firebase-firestore-compat.js', './js/app.js', './img/logo-192.png', './img/banner.jpg'];
+const CACHE_NAME = 'baraem-cache-v6';
+const ASSETS = ['./', './index.html', './manifest.json', './css/style.css', './js/db.js', './js/seed.js', './js/xlsx.js', './js/cloud.js', './js/family.js', './js/extras.js', './js/homework.js', './vendor/firebase-app-compat.js', './vendor/firebase-auth-compat.js', './vendor/firebase-firestore-compat.js', './js/app.js', './img/logo-192.png', './img/apple-touch-icon.png', './img/banner.jpg'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE_NAME).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
@@ -17,4 +17,13 @@ self.addEventListener('fetch', (e) => {
       return res;
     }).catch(() => caches.match(e.request))
   );
+});
+
+// الضغط على الإشعار يفتح التطبيق
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+    for (const c of list) { if ('focus' in c) return c.focus(); }
+    return self.clients.openWindow('./index.html');
+  }));
 });

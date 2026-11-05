@@ -80,7 +80,7 @@ function instaCard(childName, amount, purpose = 'اشتراك الحضانة') {
     <div class="insta-head"><span class="insta-logo">⚡ InstaPay</span><span>${esc(purpose)}${amount ? ' · <b>' + money(amount) + '</b>' : ''}</span></div>
     <div class="insta-num" dir="ltr">${esc(num1)}</div>
     <div class="btn-row" style="justify-content:center"><button class="btn small" data-action="copy" data-t="${esc(num1)}">📋 نسخ الرقم</button>
-      <button class="btn small primary" data-action="openInsta">فتح إنستاباي</button></div>
+      ${typeof IS_IOS !== 'undefined' && IS_IOS ? '' : '<button class="btn small primary" data-action="openInsta">فتح إنستاباي</button>'}</div>
     <div class="insta-note">✍️ اكتب في ملاحظات التحويل: <b>${esc(note)}</b> <button class="link" data-action="copy" data-t="${esc(note)}">نسخ</button></div>
     ${s.phone ? `<a class="btn small green block" style="margin-top:8px;text-align:center" target="_blank" href="${waLink(s.phone, `السلام عليكم، حوّلت ${amount ? money(amount) : ''} على إنستاباي — ${purpose} — ${childName}`)}">💬 ابعت صورة التحويل للحضانة</a>` : ''}
   </div>`;
@@ -134,7 +134,8 @@ function viewObligations() {
     html: `<p class="sub" style="color:var(--muted)">بيوصلك تنبيه على الموبايل أول يوم الاستحقاق وآخر يوم لو لسه مادفعتش.</p>
     <div class="list">${obligations().map((o) => `<div class="item clickable" data-action="editObligation" data-id="${o.id}"><div class="avatar">📌</div>
       <div class="main"><div class="title">${esc(o.name)}</div><div class="sub">${o.auto === 'salaries' ? 'إجمالي المرتبات تلقائي: ' + money(obligationAmount(o)) : o.amount ? money(o.amount) : 'المبلغ متغير'} · من يوم ${num(o.from)} لـ ${num(o.to)}</div></div><span>✏️</span></div>`).join('')}</div>
-    <button class="btn primary block" style="margin-top:10px" data-action="editObligation">+ التزام جديد</button>`,
+    <button class="btn primary block" style="margin-top:10px" data-action="editObligation">+ التزام جديد</button>
+    <div class="btn-row" style="margin-top:10px">${calendarButton('admin')}</div>`,
   };
 }
 function obligationForm(o) {
@@ -160,25 +161,74 @@ function obligationForm(o) {
 
 // ---------- التنبيهات الشهرية على الموبايل (بتشتغل حتى لو التطبيق مقفول) ----------
 let lastReminders = '';
-function syncReminders() {
-  if (!window.Android || !window.Android.setReminders) return;
+function reminderList(kind) {
   const list = [], m = thisMonth(), s = settings();
-  if (isParent()) {
+  if (kind === 'parent') {
     for (const k of famKids()) {
       const fb = famBalance(k); if (!fb || !fb.fee) continue;
       const skip = fb.thisRemaining <= 0 ? m : '';
       const pay = s.instapay ? `حوّل على إنستاباي ${s.instapay} واكتب اسم ${k.name} في ملاحظات التحويل` : 'برجاء السداد للحضانة';
       list.push({ id: `fee1_${k.id}`, day: 1, hour: 10, minute: 0, skipMonth: skip, title: `🌸 اشتراك الشهر الجديد - ${k.name}`, body: `${money(fb.fee)} · ${pay}` });
-      list.push({ id: `fee5_${k.id}`, day: 5, hour: 18, minute: 0, skipMonth: skip, title: `⏰ تذكير باشتراك ${k.name}`, body: `${money(fb.thisRemaining || fb.fee)} لسه ما اتدفعش · ${pay}` });
+      list.push({ id: `fee5_${k.id}`, day: 5, hour: 18, minute: 0, skipMonth: skip, title: `⏰ تذكير باشتراك ${k.name}`, body: `${money(fb.thisRemaining || fb.fee)} لو لسه ما اتدفعش · ${pay}` });
     }
-  } else if (Cloud.role ? can('manage') || can('finance') : true) {
+  } else {
     for (const o of obligations()) {
       const st = obligationStatus(o), skip = st.key === 'paid' ? m : '';
       const amt = obligationAmount(o) ? money(obligationAmount(o)) : '';
       list.push({ id: `ob1_${o.id}`, day: o.from, hour: 10, minute: 0, skipMonth: skip, title: `📌 ${o.name} مستحق`, body: `${amt} · من يوم ${o.from} لـ ${o.to}` });
-      if (o.to !== o.from) list.push({ id: `ob2_${o.id}`, day: o.to, hour: 10, minute: 0, skipMonth: skip, title: `⚠️ النهارده آخر يوم: ${o.name}`, body: `${amt} لسه ما اتسجلش إنه اتدفع` });
+      if (o.to !== o.from) list.push({ id: `ob2_${o.id}`, day: o.to, hour: 10, minute: 0, skipMonth: skip, title: `⚠️ النهارده آخر يوم: ${o.name}`, body: `${amt} لو لسه ما اتدفعش` });
     }
   }
+  return list;
+}
+function syncReminders() {
+  if (!window.Android || !window.Android.setReminders) return;
+  const kind = isParent() ? 'parent' : (Cloud.role ? can('manage') || can('finance') : true) ? 'admin' : '';
+  const list = kind ? reminderList(kind) : [];
   const json = JSON.stringify(list);
   if (json !== lastReminders) { lastReminders = json; try { window.Android.setReminders(json); } catch (e) { /* ignore */ } }
+}
+
+// ================== الآيفون (تطبيق ويب على الشاشة الرئيسية) ==================
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const IS_STANDALONE = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+function iosInstallHTML() {
+  return `<div class="ios-install"><b>📲 ثبّت براعم على الآيفون</b>
+    <ol><li>افتح الرابط ده من <b>Safari</b></li><li>اضغط زرار المشاركة <span class="ios-share">⬆︎</span> تحت</li>
+    <li>اختار <b>«إضافة إلى الشاشة الرئيسية»</b> ثم «إضافة»</li></ol>
+    <div class="sub">هيظهر لوجو براعم على الشاشة ويفتح زي أي تطبيق.</div></div>`;
+}
+function iosBanner() {
+  if (!IS_IOS || IS_STANDALONE || LS.get('iosHint') === '1') return '';
+  return `<div class="card ios-banner">${iosInstallHTML()}<button class="btn small" data-action="iosHintOff">تمام، فهمت</button></div>`;
+}
+
+// ---------- تذكير في التقويم (للآيفون ولأي موبايل من غير تطبيق الأندرويد) ----------
+function icsEsc(s) { return String(s).replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\;'); }
+function icsMonthly(events) {
+  const now = new Date(), st = (d) => { const x = new Date(now.getFullYear(), now.getMonth() + (now.getDate() > d ? 1 : 0), d); return `${x.getFullYear()}${pad(x.getMonth() + 1)}${pad(x.getDate())}`; };
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
+  return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Baraem//Nursery//AR', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+    ...events.flatMap((e, i) => ['BEGIN:VEVENT', `UID:baraem-${e.id || i}-${Date.now()}@baraem`, `DTSTAMP:${stamp}`,
+      `DTSTART:${st(e.day)}T${pad(e.hour)}${pad(e.minute || 0)}00`, `DTEND:${st(e.day)}T${pad(e.hour)}${pad((e.minute || 0) + 15)}00`,
+      `RRULE:FREQ=MONTHLY;BYMONTHDAY=${e.day}`, `SUMMARY:${icsEsc(e.title)}`, `DESCRIPTION:${icsEsc(e.body)}`,
+      'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${icsEsc(e.title)}`, 'TRIGGER:PT0M', 'END:VALARM', 'END:VEVENT']),
+    'END:VCALENDAR'].join('\r\n');
+}
+function addToCalendar(kind) {
+  const evs = reminderList(kind);
+  if (!evs.length) { toast('مفيش تذكيرات'); return; }
+  const ics = icsMonthly(evs), name = kind === 'parent' ? 'baraem-fees.ics' : 'baraem-obligations.ics';
+  if (IS_IOS) { location.href = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(ics); return; }
+  saveBlob(name, new Blob([ics], { type: 'text/calendar' }));
+  toast('افتح الملف وهيتضاف للتقويم 📅');
+}
+function calendarButton(kind) {
+  if (window.Android && window.Android.setReminders) return ''; // الأندرويد عنده تنبيهات تلقائية
+  return `<button class="btn small" data-action="addCal" data-kind="${kind}">📅 ${kind === 'parent' ? 'ذكّرني بالاشتراك كل شهر' : 'ضيف الالتزامات لتقويم الموبايل'}</button>`;
+}
+function notifyButton() {
+  if ((window.Android && window.Android.notify) || !('Notification' in window) || Notification.permission === 'granted') return '';
+  if (IS_IOS && !IS_STANDALONE) return '';
+  return `<button class="btn small" data-action="askNotify">🔔 تفعيل الإشعارات</button>`;
 }

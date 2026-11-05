@@ -40,7 +40,11 @@ function reqRow(r, staff) {
 function sysNotify(title, body) {
   try {
     if (window.Android && window.Android.notify) { window.Android.notify(title, body); return; }
-    if ('Notification' in window && Notification.permission === 'granted') new Notification(title, { body, icon: 'img/logo-192.png' });
+    if ('Notification' in window && Notification.permission === 'granted') {
+      const opts = { body, icon: 'img/logo-192.png', badge: 'img/logo-192.png' };
+      if (navigator.serviceWorker && navigator.serviceWorker.ready) navigator.serviceWorker.ready.then((r) => r.showNotification(title, opts)).catch(() => { try { new Notification(title, opts); } catch (e) { /* ignore */ } });
+      else new Notification(title, opts);
+    }
   } catch (e) { /* ignore */ }
 }
 function notifyRequest(r) {
@@ -138,7 +142,7 @@ function viewPHome() {
   const di = DAY_INDEX[new Date().getDay()];
   const sch = (k.classId && D.schedule.find((x) => x.id === k.classId && x.slots && x.slots.length)) || D.schedule.find((x) => x.id === 'general');
   const reqs = (Cloud.req[k.id] || []).filter((r) => r.status === 'pending').length;
-  return `${kidSwitcher()}
+  return `${kidSwitcher()}${iosBanner()}
   <div class="card kid-card"><div class="profile-head">${avatar(k, true)}<div>
     <h2>${esc(k.name)}</h2><div class="sub">${[k.className && k.className !== 'بدون فصل' ? esc(k.className) : '', k.birthDate ? age(k.birthDate) : ''].filter(Boolean).join(' · ')}</div>
     <div style="margin-top:6px">${a ? (a.s === 'absent' ? `<span class="badge red">❌ غائب النهارده${a.e ? ' (بإذن)' : ''}</span>` : `<span class="badge green">✅ في الحضانة${a.i ? ' من ' + a.i : ''}</span>${a.o ? ` <span class="badge blue">🚪 خرج ${a.o}</span>` : ''}`) : '<span class="badge gray">لسه ما اتسجلش حضور النهارده</span>'}</div>
@@ -220,6 +224,7 @@ function viewPFees() {
     <div class="stat ${fb.balance ? 'red' : 'green'}"><div class="label">إجمالي المستحق</div><div class="value">${money(fb.balance)}</div></div>
   </div>
   ${fb.balance > 0 ? instaCard(k.name, fb.balance) : ''}
+  <div class="btn-row" style="margin:10px 0">${calendarButton('parent')}</div>
   ${s.payInfo ? `<div class="card"><h3>💳 طرق دفع تانية</h3><div style="white-space:pre-wrap">${esc(s.payInfo)}</div></div>` : ''}
   <div class="section-title"><h3>المدفوعات</h3></div>
   <div class="list">${(k.fin.payments || []).map((p) => `<div class="item"><div class="main"><div class="title">${esc(p.t)}${p.m ? ' · ' + monthLabel(p.m) : ''}</div>
@@ -232,7 +237,8 @@ function viewPMore() {
   const sch = (k.classId && D.schedule.find((x) => x.id === k.classId && x.slots && x.slots.length)) || D.schedule.find((x) => x.id === 'general');
   return `<div class="card sync-card"><div class="profile-head"><div class="avatar">👤</div><div><b>${esc(Cloud.name || 'ولي الأمر')}</b>
     <div class="sub">${esc(toDigits(Cloud.email.split('@')[0]))} · ${ROLES.parent}</div><div class="sub">${syncLabel()}</div></div></div>
-    <div class="btn-row" style="margin-top:10px"><button class="btn small" data-action="logout">🚪 تسجيل خروج</button></div></div>
+    <div class="btn-row" style="margin-top:10px">${notifyButton()}${calendarButton('parent')}<button class="btn small" data-action="logout">🚪 تسجيل خروج</button></div></div>
+  ${IS_IOS && !IS_STANDALONE ? `<div class="card">${iosInstallHTML()}</div>` : ''}
   <div class="card" style="text-align:center"><img src="img/logo-192.png" style="width:90px" alt=""><h3 style="margin:6px 0">${esc(s.name)}</h3><div class="slogan">${esc(s.slogan)}</div>
     <p>📍 ${esc(s.address)}</p>
     <div class="btn-row" style="justify-content:center"><a class="btn green" href="tel:${esc(s.phone)}">📞 اتصال بالحضانة</a>
@@ -340,8 +346,7 @@ function annForm(a) {
 function randomPin() { return String(Math.floor(100000 + Math.random() * 900000)); }
 function parentInvite(c, phone, pin) {
   const s = settings();
-  const link = 'https://github.com/mhashaad1-sys/-/releases/latest/download/nursery-app.apk';
-  return `السلام عليكم ولي أمر ${c.name} 🌸\nتقدر تتابع ${c.name} من تطبيق ${s.name}: الحضور والغياب، ملاحظات الحضانة، المصاريف، وتبعت طلب غياب أو دواء.\n\n📲 حمّل التطبيق:\n${link}\n\n👤 رقم الدخول: ${phone}\n🔑 الباسورد: ${pin}\n\n${s.name}`;
+  return `السلام عليكم ولي أمر ${c.name} 🌸\nتقدر تتابع ${c.name} من تطبيق ${s.name}: الحضور والغياب، التقرير اليومي، المصاريف، وتبعت طلب غياب أو دواء.\n\n📲 أندرويد: حمّل التطبيق من هنا\n${s.apkUrl}\n\n🍎 آيفون: افتح الرابط ده من Safari واضغط ⬆️ ثم «إضافة إلى الشاشة الرئيسية»\n${s.webUrl}\n\n👤 رقم الدخول: ${phone}\n🔑 الباسورد: ${pin}\n\n${s.name}`;
 }
 function parentForm(c) {
   const sib = D.children.find((x) => x.id !== c.id && x.parentLogin && toDigits(x.parentLogin) === toDigits(c.phone));

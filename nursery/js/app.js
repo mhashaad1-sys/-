@@ -218,6 +218,7 @@ function viewHome() {
   const h = new Date().getHours();
 
   return `
+  ${iosBanner()}
   <div class="brand-card">
     <img src="img/logo-192.png" alt="">
     <div><div class="greet">${h < 12 ? 'صباح الخير' : 'مساء الخير'} 🌸</div><div class="slogan">${esc(s.slogan)}</div><div class="sub">${dateLabel(t)}</div></div>
@@ -833,7 +834,7 @@ function accountCard() {
   return `<div class="card sync-card"><div class="profile-head"><div class="avatar">👤</div><div><div class="title"><b>${esc(Cloud.name || Cloud.email)}</b></div>
     <div class="sub">${esc(Cloud.email)} · ${esc(ROLES[Cloud.role] || '')}</div><div class="sub">${syncLabel()}</div></div></div>
     <div class="btn-row" style="margin-top:10px">${can('manage') && Cloud.role ? '<button class="btn small primary" data-action="goMembers">👥 المستخدمين والصلاحيات</button>' : ''}
-    <button class="btn small" data-action="logout">🚪 تسجيل خروج</button></div></div>`;
+    ${notifyButton()}<button class="btn small" data-action="logout">🚪 تسجيل خروج</button></div></div>`;
 }
 
 function viewMore() {
@@ -1044,7 +1045,7 @@ function renderGate() {
   } else if (Cloud.ready && Cloud.status === 'connecting' && Cloud.user && !Cloud.role) {
     html = `<h2>🔄 جاري الاتصال بالسيرفر</h2><p>${esc(Cloud.error || 'لحظة واحدة...')}</p>`;
   } else if (Cloud.ready && !Cloud.user && !skip && Cloud.status !== 'connecting') {
-    html = `<form id="loginForm" class="form" style="grid-template-columns:1fr">
+    html = `${IS_IOS && !IS_STANDALONE ? iosInstallHTML() : ''}<form id="loginForm" class="form" style="grid-template-columns:1fr">
       <label>الإيميل أو رقم الموبايل (لأولياء الأمور)<input type="text" id="lEmail" autocomplete="username" inputmode="email" dir="ltr" required></label>
       <label>الباسورد<input type="password" id="lPass" autocomplete="current-password" required></label>
       <div id="lErr" class="alert hidden"></div>
@@ -1443,6 +1444,9 @@ const ACTIONS = {
   repSet: (el) => setReport(el.dataset.id, el.dataset.f, el.dataset.v),
   repTemplate: () => repTemplateForm(),
   copy: (el) => copyText(el.dataset.t),
+  addCal: (el) => addToCalendar(el.dataset.kind),
+  iosHintOff: () => { LS.set('iosHint', '1'); render(); },
+  askNotify: async () => { try { const r = await Notification.requestPermission(); toast(r === 'granted' ? 'تم تفعيل الإشعارات ✅' : 'الإشعارات مقفولة'); } catch (e) { toast('الموبايل ده مش بيدعم الإشعارات'); } render(); },
   openInsta,
   goObligations: () => push('obligations'),
   payObligation: (el) => payObligation(el.dataset.id),
