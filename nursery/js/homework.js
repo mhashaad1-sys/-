@@ -174,13 +174,15 @@ function viewPHw() {
   const items = [...D.homework].sort((a, b) => (a.order || 0) - (b.order || 0) || (a.createdAt || '').localeCompare(b.createdAt || ''));
   const pendingSub = (Cloud.req[k.id] || []).some((r) => r.type === 'hwsub' && r.status === 'pending');
   return `${kidSwitcher()}
+  ${learnCard(k)}
   ${active ? `<div class="card hw-sub ok"><b>✅ ${esc(k.name || '')} مشترك في منصة التمارين</b><div class="sub">لحد ${dateLabel(until)}</div></div>`
-    : `<div class="card hw-sub"><h3>📚 منصة تمارين براعم</h3><p>تمارين تفاعلية في نور البيان والإنجليزي والحساب، بالصوت والألعاب، والحضانة بتتابع تقدم ${esc(k.name || 'طفلك')}.</p>
+    : `<div class="card hw-sub"><h3>📚 منصة تمارين براعم</h3><p>منهج كامل لـ KG1 و KG2: عربي، English، حساب، العالم حوالينا، وقيم وآداب — بالصوت والصور والألعاب، والحضانة بتتابع تقدم ${esc(k.name || 'طفلك')}.</p>
+      <div class="sub">🎁 أول درس في كل مادة مجاني — جرّبوه دلوقتي تحت.</div>
       <div class="price">${money(hwPrice())} <small>في الشهر</small></div>
       ${items.some((x) => x.free) ? '<div class="sub">🎁 فيه تجربة مجانية — افتح التمرين اللي عليه "مجاني" تحت.</div>' : ''}
       ${instaCard(k.name || '', hwPrice(), 'اشتراك منصة التمارين')}
       ${pendingSub ? '<div class="alert">⏳ طلب الاشتراك وصل للحضانة وهيتفعل بعد مراجعة التحويل</div>' : `<button class="btn primary block" style="margin-top:10px" data-action="hwSubscribe">✔ حوّلت — فعّلوا الاشتراك</button>`}</div>`}
-  <div class="section-title"><h3>التمارين</h3></div>
+  ${items.length ? '<div class="section-title"><h3>تمارين إضافية</h3></div>' : ''}
   <div class="list">${items.map((it) => {
     const open = active || it.free, p = Cloud.hwProg[hwId(k.id, it.id)];
     return `<div class="item ${open ? 'clickable' : ''}" data-action="${open ? 'openHw' : 'hwLocked'}" data-id="${it.id}"><div class="avatar">${open ? '📖' : '🔒'}</div>
@@ -189,7 +191,7 @@ function viewPHw() {
       ${p && p.total ? `<div class="bar-track" style="margin-top:6px"><div class="bar-fill green" style="width:${Math.round((p.done || 0) / p.total * 100)}%"></div></div>
         <div class="sub">خلّص ${num(p.done)} من ${num(p.total)} درس · ⭐ ${num(p.xp || 0)} نقطة · ${num(p.minutes || 0)} دقيقة</div>` : ''}</div>
       <span class="btn small ${open ? 'primary' : ''}">${open ? 'افتح' : '🔒'}</span></div>`;
-  }).join('') || '<div class="empty">لسه مفيش تمارين</div>'}</div>`;
+  }).join('')}</div>`;
 }
 
 // ---------- شاشة الإدارة ----------
@@ -198,7 +200,7 @@ function viewHomework() {
   let body = '';
   if (tab === 'items') {
     const items = [...D.homework].sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
-    body = `${can('manage') ? `<div class="card"><h3>رفع تمرين جديد</h3><p class="sub">ملف HTML (زي منصة نور البيان). أول ملف تعلّم عليه "مجاني للتجربة" يقدر أي ولي أمر يجربه.</p>
+    body = `${learnCard(null)}${can('manage') ? `<div class="card"><h3>رفع تمرين جديد</h3><p class="sub">ملف HTML (زي منصة نور البيان). أول ملف تعلّم عليه "مجاني للتجربة" يقدر أي ولي أمر يجربه.</p>
       <button class="btn primary" data-action="hwUpload">📂 اختيار ملف HTML</button>
       <div class="sub" style="margin-top:6px">سعر الاشتراك الشهري: <b>${money(hwPrice())}</b> (من الإعدادات)</div></div>` : ''}
       <div class="list">${items.map((it) => `<div class="item"><div class="avatar">📖</div><div class="main"><div class="title">${esc(it.title)} ${it.free ? '<span class="badge green">مجاني للتجربة</span>' : '<span class="badge purple">للمشتركين</span>'}</div>
@@ -228,7 +230,7 @@ function viewHomework() {
   };
 }
 function hwProgDetail(p) {
-  const SUBJ = { noor: 'نور البيان', en: 'English', math: 'الحساب' };
+  const SUBJ = { noor: 'نور البيان', en: 'English', math: 'الحساب', ar: 'العربي', sci: 'العالم حوالينا', val: 'قيم وآداب' };
   openModal(`📊 ${(child(p.childId) || {}).name || ''}`, `<div class="stats"><div class="stat green"><div class="label">دروس خلصها</div><div class="value">${num(p.done || 0)} / ${num(p.total || 0)}</div></div>
     <div class="stat purple"><div class="label">النقاط</div><div class="value">⭐ ${num(p.xp || 0)}</div></div>
     <div class="stat blue"><div class="label">وقت التدريب</div><div class="value">${num(p.minutes || 0)} د</div></div>

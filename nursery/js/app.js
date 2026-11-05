@@ -168,6 +168,7 @@ function go(tab) { state.tab = tab; state.stack = []; render(); window.scrollTo(
 function push(view, params = {}) { state.stack.push({ view, ...params }); history.pushState({ d: state.stack.length }, ''); render(); window.scrollTo(0, 0); }
 function back() { if (!$('#modal').classList.contains('hidden')) { closeModal(); return; } if (state.stack.length) history.back(); }
 window.addEventListener('popstate', () => {
+  if (LRN) { closeLearn(true); return; }
   if (hwSession) { closeHomework(true); return; }
   if (!$('#modal').classList.contains('hidden')) { closeModal(); history.pushState({ d: state.stack.length }, ''); return; }
   if (state.stack.length) { state.stack.pop(); render(); }
@@ -1623,6 +1624,8 @@ const ACTIONS = {
   },
 };
 
+Object.assign(ACTIONS, ACTIONS_EXTRA);
+
 document.addEventListener('click', (e) => {
   const nav = e.target.closest('.bottom-nav button');
   if (nav) { if (!$('#modal').classList.contains('hidden')) closeModal(); go(nav.dataset.tab); return; }
@@ -1671,6 +1674,7 @@ $('#backBtn').addEventListener('click', back);
 window.addEventListener('afterprint', () => { $('#printArea').innerHTML = ''; });
 // يستدعيه تطبيق الأندرويد عند الضغط على زر الرجوع؛ يرجع false لو مفيش حاجة نرجع لها
 window.nurseryBack = () => {
+  if (LRN) { ACTIONS.learnBack(); return true; }
   if (hwSession) { closeHomework(false); return true; }
   if (!$('#modal').classList.contains('hidden')) { closeModal(); return true; }
   if (state.stack.length) { history.back(); return true; }
