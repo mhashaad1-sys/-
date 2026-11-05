@@ -175,13 +175,12 @@ function viewPHw() {
   const pendingSub = (Cloud.req[k.id] || []).some((r) => r.type === 'hwsub' && r.status === 'pending');
   return `${kidSwitcher()}
   ${learnCard(k)}
-  ${active ? `<div class="card hw-sub ok"><b>✅ ${esc(k.name || '')} مشترك في منصة التمارين</b><div class="sub">لحد ${dateLabel(until)}</div></div>`
+  ${active ? `<div class="card hw-sub ok"><b>✅ ${esc(k.name || '')} مشترك${(k.hw || {}).plan ? ' — ' + esc(k.hw.plan) : ''}</b><div class="sub">لحد ${dateLabel(until)}</div>${subStatusLine(k)}
+      <details style="margin-top:8px"><summary class="sub">تجديد الاشتراك</summary>${plansPicker(k)}</details></div>`
     : `<div class="card hw-sub"><h3>📚 منصة تمارين براعم</h3><p>منهج كامل لـ KG1 و KG2: عربي، English، حساب، العالم حوالينا، وقيم وآداب — بالصوت والصور والألعاب، والحضانة بتتابع تقدم ${esc(k.name || 'طفلك')}.</p>
       <div class="sub">🎁 أول درس في كل مادة مجاني — جرّبوه دلوقتي تحت.</div>
-      <div class="price">${money(hwPrice())} <small>في الشهر</small></div>
-      ${items.some((x) => x.free) ? '<div class="sub">🎁 فيه تجربة مجانية — افتح التمرين اللي عليه "مجاني" تحت.</div>' : ''}
-      ${instaCard(k.name || '', hwPrice(), 'اشتراك منصة التمارين')}
-      ${pendingSub ? '<div class="alert">⏳ طلب الاشتراك وصل للحضانة وهيتفعل بعد مراجعة التحويل</div>' : `<button class="btn primary block" style="margin-top:10px" data-action="hwSubscribe">✔ حوّلت — فعّلوا الاشتراك</button>`}</div>`}
+      <div class="sub" style="margin:8px 0">اختار الباقة:</div>
+      ${plansPicker(k)}</div>`}
   ${items.length ? '<div class="section-title"><h3>تمارين إضافية</h3></div>' : ''}
   <div class="list">${items.map((it) => {
     const open = active || it.free, p = Cloud.hwProg[hwId(k.id, it.id)];
@@ -202,7 +201,7 @@ function viewHomework() {
     const items = [...D.homework].sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
     body = `${learnCard(null)}${can('manage') ? `<div class="card"><h3>رفع تمرين جديد</h3><p class="sub">ملف HTML (زي منصة نور البيان). أول ملف تعلّم عليه "مجاني للتجربة" يقدر أي ولي أمر يجربه.</p>
       <button class="btn primary" data-action="hwUpload">📂 اختيار ملف HTML</button>
-      <div class="sub" style="margin-top:6px">سعر الاشتراك الشهري: <b>${money(hwPrice())}</b> (من الإعدادات)</div></div>` : ''}
+      <div class="sub" style="margin-top:6px">الباقات: ${plans().map((p) => `<b>${esc(p.name)}</b> ${money(p.price)}`).join(' · ')} — <a href="#" data-action="goPlans">تعديل</a></div></div>` : ''}
       <div class="list">${items.map((it) => `<div class="item"><div class="avatar">📖</div><div class="main"><div class="title">${esc(it.title)} ${it.free ? '<span class="badge green">مجاني للتجربة</span>' : '<span class="badge purple">للمشتركين</span>'}</div>
         <div class="sub">${esc(it.desc || '')} · ${num(Math.round((it.size || 0) / 1024))} ك.ب</div></div>
         <div class="btn-row"><button class="btn small" data-action="openHw" data-id="${it.id}">👁 معاينة</button>${can('manage') ? `<button class="btn small" data-action="hwEdit" data-id="${it.id}">✏️</button>` : ''}</div></div>`).join('') || '<div class="empty">لسه مفيش تمارين</div>'}</div>`;
@@ -210,11 +209,13 @@ function viewHomework() {
     const kids = activeChildren().filter((c) => c.parentLogin);
     const act = kids.filter((c) => hwActiveUntil(c.hwUntil));
     body = `<div class="stats"><div class="stat green"><div class="label">مشتركين</div><div class="value">${num(act.length)}</div></div>
-      <div class="stat purple"><div class="label">دخل الاشتراكات الشهري</div><div class="value">${money(act.length * hwPrice())}</div></div></div>
+      <div class="stat purple"><div class="label">دخل الاشتراكات هذا الشهر</div><div class="value">${money(sum(D.payments.filter((x) => x.type === 'homework' && (x.date || '').startsWith(thisMonth())), (x) => x.amount))}</div></div></div>
+      ${can('manage') ? `<div class="btn-row" style="margin-bottom:8px"><button class="btn small" data-action="goPlans">🎟️ الباقات (${plans().map((p) => p.name).join('، ')})</button></div>` : ''}
       <p class="sub" style="color:var(--muted)">الأطفال اللي أولياء أمورهم عندهم حساب في التطبيق بس. ${activeChildren().length - kids.length ? `(${num(activeChildren().length - kids.length)} طفل لسه مالهمش حساب)` : ''}</p>
       <div class="list">${kids.map((c) => `<div class="item">${avatar(c)}<div class="main"><div class="title">${esc(c.name)}</div>
-        <div class="sub">${hwActiveUntil(c.hwUntil) ? `✅ مشترك لحد ${dateLabel(c.hwUntil)}` : c.hwUntil ? `انتهى ${dateLabel(c.hwUntil)}` : 'مش مشترك'}</div></div>
-        ${can('manage') ? `<button class="btn small ${hwActiveUntil(c.hwUntil) ? '' : 'primary'}" data-action="hwActivate" data-id="${c.id}">${hwActiveUntil(c.hwUntil) ? '+ شهر' : 'تفعيل'}</button>` : ''}</div>`).join('') || '<div class="empty">اعمل حسابات لأولياء الأمور الأول</div>'}</div>`;
+        <div class="sub">${hwActiveUntil(c.hwUntil) ? `✅ ${esc(c.hwPlan || 'مشترك')} لحد ${dateLabel(c.hwUntil)}` : c.hwUntil ? `انتهى ${dateLabel(c.hwUntil)}` : 'مش مشترك'}</div></div>
+        ${can('manage') ? `<div class="btn-row"><button class="btn small ${hwActiveUntil(c.hwUntil) ? '' : 'primary'}" data-action="hwActivate" data-id="${c.id}">${hwActiveUntil(c.hwUntil) ? 'تجديد' : 'تفعيل'}</button>
+          ${hwActiveUntil(c.hwUntil) ? `<button class="btn small danger" data-action="subStop" data-id="${c.id}">إيقاف</button>` : ''}</div>` : ''}</div>`).join('') || '<div class="empty">اعمل حسابات لأولياء الأمور الأول</div>'}</div>`;
   } else {
     const prog = D.hwProg.filter((p) => child(p.childId)).sort((a, b) => (b.last || '').localeCompare(a.last || ''));
     body = `<div class="list">${prog.map((p) => `<div class="item clickable" data-action="hwProgDetail" data-id="${p.id}">${avatar(child(p.childId))}
@@ -288,6 +289,10 @@ function hwEditForm(it) {
   });
 }
 async function hwActivate(cid, ask = true) {
+  if (ask) { activateForm(cid); return; }
+  return subActivate(cid, {});
+}
+async function hwActivateOld(cid, ask = true) {
   const c = child(cid); if (!c) return;
   const base = hwActiveUntil(c.hwUntil) ? c.hwUntil : today();
   const until = addMonth(base);

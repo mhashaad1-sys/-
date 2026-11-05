@@ -5,7 +5,7 @@ const D = {};
 DB.STORES.forEach((s) => { D[s] = []; });
 
 const EXPENSE_CATEGORIES = ['إيجار', 'رواتب', 'سلف العاملين', 'أكل ووجبات', 'كهرباء ومياه وغاز', 'أدوات وألعاب', 'أدوات تعليمية وكتب', 'أدوات نظافة', 'صيانة', 'مواصلات', 'إنترنت وتليفون', 'دعاية وإعلان', 'أخرى'];
-const PAYMENT_TYPES = { monthly: 'اشتراك شهري', registration: 'رسوم تسجيل', uniform: 'زي وأدوات', books: 'كتب', bus: 'باص', activity: 'رحلة / نشاط / حفلة', homework: 'اشتراك منصة التمارين', other: 'أخرى' };
+const PAYMENT_TYPES = { monthly: 'اشتراك شهري', registration: 'رسوم تسجيل', uniform: 'زي وأدوات', books: 'كتب', bus: 'باص', activity: 'رحلة / نشاط / حفلة', homework: 'اشتراك التطبيق / التمارين', other: 'أخرى' };
 const PAYMENT_METHODS = ['نقدي', 'فودافون كاش', 'إنستاباي', 'تحويل بنكي', 'أخرى'];
 const NOTE_KINDS = ['عام', 'صحة', 'وجبات', 'نوم', 'سلوك', 'تعليم', 'حادثة / إصابة'];
 const STAFF_ROLES = ['مديرة', 'مُعلِّمة', 'مُساعِدة', 'دادة', 'سائق', 'مشرفة باص', 'عامل/ة نظافة', 'طباخ/ة', 'محاسب', 'أخرى'];
@@ -188,6 +188,7 @@ function render() {
   $('#nurseryName').textContent = settings().name;
   let html, title = parent ? (PARENT_TABS.find((x) => x[0] === state.tab) || [])[2] : TITLES[state.tab];
   if (top) { const v = VIEWS[top.view](top); html = v.html; title = v.title; }
+  else if (parent && parentLocked() && state.tab !== 'pMore') html = viewPLocked();
   else html = (parent ? PARENT_VIEWS : TABS)[state.tab]();
   $('#pageTitle').textContent = title;
   $('#view').innerHTML = html;
@@ -971,7 +972,7 @@ function viewSettings() {
       <label>السن المقبول<input id="sMinAge" value="${esc(s.minAge)}"></label>
       <label>رسوم التسجيل الافتراضية<input id="sRegFee" type="number" value="${esc(s.regFee)}"></label>
       <label>رقم إنستاباي<input id="sInsta" type="tel" dir="ltr" value="${esc(s.instapay || '')}"></label>
-      <label>اشتراك منصة التمارين (شهري)<input id="sHwPrice" type="number" value="${esc(s.hwPrice || 100)}"></label>
+      <label>باقات الاشتراك<button type="button" class="btn small" data-action="goPlans">🎟️ ${esc(plans().map((p) => p.name + ' ' + num(p.price)).join(' · '))}</button></label>
       <label class="full">طرق دفع تانية (تظهر لأولياء الأمور)<textarea id="sPayInfo" rows="2" placeholder="مثال: فودافون كاش 010xxxxxxx · إنستاباي ...">${esc(s.payInfo || '')}</textarea></label>
       <div class="actions"><button class="btn primary" data-action="saveSettings">حفظ</button></div>
     </div></div>
@@ -1072,7 +1073,7 @@ function renderGate() {
 }
 
 const TABS = { home: viewHome, children: viewChildren, attendance: viewAttendance, finance: viewFinance, staff: viewStaffTab, more: viewMore };
-const VIEWS = { child: viewChildProfile, staffProfile: viewStaffProfile, classes: viewClasses, assign: viewAssign, reports: viewReports, settings: viewSettings, notes: viewNotes, schedule: viewSchedule, themes: viewThemes, messages: viewMessages, import: viewImport, about: viewAbout, members: viewMembers, requests: viewRequests, announcements: viewAnnouncements, bulkParents: viewBulkParents, daily: viewDaily, homework: viewHomework, obligations: viewObligations };
+const VIEWS = { child: viewChildProfile, staffProfile: viewStaffProfile, classes: viewClasses, assign: viewAssign, reports: viewReports, settings: viewSettings, notes: viewNotes, schedule: viewSchedule, themes: viewThemes, messages: viewMessages, import: viewImport, about: viewAbout, members: viewMembers, requests: viewRequests, announcements: viewAnnouncements, bulkParents: viewBulkParents, daily: viewDaily, homework: viewHomework, obligations: viewObligations, plans: viewPlans };
 
 // ================== النماذج ==================
 function openModal(title, html) { $('#modalTitle').textContent = title; $('#modalBody').innerHTML = html; $('#modal').classList.remove('hidden'); }
@@ -1441,6 +1442,10 @@ const ACTIONS = {
   logout: async () => { if (confirm('تسجيل خروج من الموبايل ده؟\nالبيانات محفوظة على السيرفر وهترجع لما تسجل دخول تاني.')) await Cloud.logout(); },
   retry: () => location.reload(),
   pickKid: (el) => { state.kid = el.dataset.id; render(); },
+  pickPlan: (el) => { state.subPlan = el.dataset.id; render(); },
+  goPlans: () => push('plans'),
+  planEdit: (el) => planForm(plans().find((p) => p.id === el.dataset.id)),
+  subStop: async (el) => { const c = child(el.dataset.id); if (confirm(`إيقاف اشتراك ${c.name}؟`)) await subStop(c.id); },
   goDaily: () => { state.repDate = today(); push('daily'); },
   repSet: (el) => setReport(el.dataset.id, el.dataset.f, el.dataset.v),
   repTemplate: () => repTemplateForm(),
@@ -1462,9 +1467,9 @@ const ACTIONS = {
   hwActivate: (el) => hwActivate(el.dataset.id, true),
   hwProgDetail: (el) => hwProgDetail(D.hwProg.find((x) => x.id === el.dataset.id)),
   hwSubscribe: async () => {
-    const k = curKid();
-    if (!confirm(`تأكيد إنك حوّلت ${money(hwPrice())} على إنستاباي لاشتراك ${k.name} في منصة التمارين؟`)) return;
-    try { await Cloud.sendRequest({ type: 'hwsub', childId: k.id, childName: k.name, reason: `حوّلت ${money(hwPrice())} على إنستاباي` }); toast('تم إرسال الطلب ✅ هيتفعل بعد المراجعة'); }
+    const k = curKid().id ? curKid() : { id: (Cloud.childIds || [])[0], name: '' }, p = planById(state.subPlan);
+    if (!confirm(`تأكيد إنك حوّلت ${money(p.price)} على إنستاباي — ${subWhat()} (${p.name})${k.name ? ' لـ ' + k.name : ''}؟`)) return;
+    try { await Cloud.sendRequest({ type: 'hwsub', childId: k.id, childName: k.name || '', planId: p.id, reason: `حوّلت ${money(p.price)} على إنستاباي — باقة ${p.name}` }); toast('تم إرسال الطلب ✅ هيتفعل بعد المراجعة'); }
     catch (e) { toast(authMsg(e)); }
   },
   pTab: (el) => go(el.dataset.t),
@@ -1604,7 +1609,7 @@ const ACTIONS = {
   },
   shareAbout: () => shareText(aboutText()),
   saveSettings: async () => {
-    await saveSettings({ name: $('#sName').value.trim() || DEFAULT_SETTINGS.name, slogan: $('#sSlogan').value.trim(), phone: $('#sPhone').value.trim(), currency: $('#sCurrency').value.trim() || 'ج.م', address: $('#sAddress').value.trim(), minAge: $('#sMinAge').value.trim(), regFee: Number($('#sRegFee').value) || '', payInfo: $('#sPayInfo').value.trim(), instapay: $('#sInsta').value.trim(), hwPrice: Number($('#sHwPrice').value) || 100 });
+    await saveSettings({ name: $('#sName').value.trim() || DEFAULT_SETTINGS.name, slogan: $('#sSlogan').value.trim(), phone: $('#sPhone').value.trim(), currency: $('#sCurrency').value.trim() || 'ج.م', address: $('#sAddress').value.trim(), minAge: $('#sMinAge').value.trim(), regFee: Number($('#sRegFee').value) || '', payInfo: $('#sPayInfo').value.trim(), instapay: $('#sInsta').value.trim() });
     toast('تم حفظ الإعدادات ✅'); render();
   },
   importData: () => $('#importFile').click(),
@@ -1654,6 +1659,7 @@ document.addEventListener('change', async (e) => {
   else if (id === 'attDate') { state.attDate = t.value || today(); render(); }
   else if (id === 'attClass') { state.attClass = t.value; render(); }
   else if (id === 'staffAttDate') { state.staffAttDate = t.value || today(); render(); }
+  else if (t.name === 'subMode') { await saveSettings({ subMode: t.value }); toast(t.value === 'app' ? 'الاشتراك بقى للتطبيق كله ✅' : 'الاشتراك بقى للتمارين والمنهج ✅'); render(); }
   else if (id === 'repDate') { state.repDate = t.value || today(); render(); }
   else if (id === 'repClass') { state.repClass = t.value; render(); }
   else if (t.dataset.rep) { const d = state.repDate, cid = t.dataset.rep, old = repOf(d, cid) || { id: `${d}_${cid}`, date: d, childId: cid }; await save('reports', { ...old, [t.dataset.f]: t.value.trim() }); }

@@ -91,7 +91,7 @@ function publishFamily(cid) {
   const data = {
     childId: cid, name: c.name, className: className(c.classId), photo: c.photo || '', birthDate: c.birthDate || '', gender: c.gender || '',
     medical: c.medical || '', pickup: c.pickup || '', active: c.active !== false, classId: c.classId || '', att,
-    hw: { until: c.hwUntil || '' },
+    hw: { until: c.hwUntil || '', plan: c.hwPlan || '' },
     reports: Object.fromEntries(D.reports.filter((r) => r.childId === cid && r.date >= cutoff.slice(0, 8) + '01').map((r) => { const x = { ...r }; delete x.id; delete x.childId; return [r.date, x]; })),
     notes: D.notes.filter((n) => n.childId === cid && n.share !== false).sort((a, b) => (b.date + b.id).localeCompare(a.date + a.id)).slice(0, 30).map((n) => ({ d: n.date, k: n.kind, t: n.text })),
   };
@@ -142,7 +142,7 @@ function viewPHome() {
   const di = DAY_INDEX[new Date().getDay()];
   const sch = (k.classId && D.schedule.find((x) => x.id === k.classId && x.slots && x.slots.length)) || D.schedule.find((x) => x.id === 'general');
   const reqs = (Cloud.req[k.id] || []).filter((r) => r.status === 'pending').length;
-  return `${kidSwitcher()}${iosBanner()}
+  return `${kidSwitcher()}${iosBanner()}${subStatusLine(k)}
   <div class="card kid-card"><div class="profile-head">${avatar(k, true)}<div>
     <h2>${esc(k.name)}</h2><div class="sub">${[k.className && k.className !== 'بدون فصل' ? esc(k.className) : '', k.birthDate ? age(k.birthDate) : ''].filter(Boolean).join(' · ')}</div>
     <div style="margin-top:6px">${a ? (a.s === 'absent' ? `<span class="badge red">❌ غائب النهارده${a.e ? ' (بإذن)' : ''}</span>` : `<span class="badge green">✅ في الحضانة${a.i ? ' من ' + a.i : ''}</span>${a.o ? ` <span class="badge blue">🚪 خرج ${a.o}</span>` : ''}`) : '<span class="badge gray">لسه ما اتسجلش حضور النهارده</span>'}</div>
@@ -288,7 +288,7 @@ function decideForm(r) {
   openModal(`${t.icon} ${t.label} - ${c ? c.name : r.childName || ''}`, `<div class="card" style="white-space:pre-wrap">${esc(reqDetails(r))}</div>
     <div class="form"><label class="full">رد على ولي الأمر (اختياري)<textarea id="reqReply" rows="2"></textarea></label>
     ${r.type === 'absence' ? '<p class="sub full" style="color:var(--muted)">الموافقة هتسجل الطفل "غائب بإذن" في الأيام دي تلقائيًا.</p>' : ''}
-    ${r.type === 'hwsub' ? `<p class="sub full" style="color:var(--muted)">اتأكد إن التحويل (${money(hwPrice())}) وصل على إنستاباي. الموافقة هتفعّل المنصة شهر وتسجّل الدفعة.</p>` : ''}
+    ${r.type === 'hwsub' ? `<p class="sub full" style="color:var(--muted)">اتأكد إن التحويل (${money(planById(r.planId).price)}) وصل على إنستاباي. الموافقة هتفعّل باقة «${esc(planById(r.planId).name)}» (${planDuration(planById(r.planId))}) وتسجّل الدفعة.</p>` : ''}
     ${r.type === 'medicine' ? '<p class="sub full" style="color:var(--muted)">الموافقة هتظهر الدواء 💊 جنب اسم الطفل في الحضور طول المدة.</p>' : ''}
     <div class="actions"><button class="btn green" data-action="reqDecision" data-id="${r.id}" data-st="approved">✔ موافقة</button>
     <button class="btn danger" data-action="reqDecision" data-id="${r.id}" data-st="rejected">✗ رفض</button></div></div>`);
@@ -310,7 +310,7 @@ async function reqDecision(id, status) {
   }
   if (r.type === 'hwsub' && status === 'approved') {
     if (!can('manage')) { toast('التفعيل للمدير بس'); return; }
-    await hwActivate(r.childId, false);
+    await subActivate(r.childId, { planId: r.planId });
   }
   if (r.type === 'medicine' && status === 'approved') {
     const c = child(r.childId);
@@ -353,11 +353,13 @@ function parentForm(c) {
   openForm({
     title: `حساب ولي أمر ${c.name}`,
     intro: sib ? `<p class="alert">الرقم ده عنده حساب بالفعل (ولي أمر ${esc(sib.name)}). هيتضاف ${esc(c.name)} لنفس الحساب، ومش محتاج باسورد جديد.</p>` : '<p class="sub" style="color:var(--muted)">ولي الأمر هيدخل برقم الموبايل والباسورد ده. ابعتهم له على الواتساب بعد الحفظ.</p>',
-    data: { name: c.guardianName || `ولي أمر ${c.name}`, phone: c.phone || '', password: sib ? '' : randomPin() },
+    data: { name: c.guardianName || `ولي أمر ${c.name}`, phone: c.phone || '', password: sib ? '' : randomPin(), plan: '', paid: true },
     fields: [
       { name: 'name', label: 'اسم ولي الأمر', required: true, full: true },
       { name: 'phone', label: 'رقم الموبايل (للدخول)', type: 'tel', required: true, full: true },
       ...(sib ? [] : [{ name: 'password', label: 'الباسورد (٦ أرقام على الأقل)', required: true, full: true }]),
+      { name: 'plan', label: `🎟️ الاشتراك (${subMode() === 'app' ? 'التطبيق كله' : 'التمارين والمنهج'})`, type: 'select', options: planOptions(true).filter((o) => o[0] !== 'custom'), full: true },
+      { name: 'paid', label: 'اتدفع (يتسجل في المقبوضات)', type: 'checkbox', full: true },
     ],
     onSave: async (v) => {
       if (!sib && v.password.length < 6) { toast('الباسورد لازم ٦ أرقام على الأقل'); return false; }
@@ -365,6 +367,7 @@ function parentForm(c) {
       catch (e) { toast(e.code === 'exists' ? e.message : authMsg(e)); return false; }
       const upd = { ...c, parentLogin: toDigits(v.phone), phone: c.phone || v.phone, guardianName: c.guardianName || v.name };
       await save('children', upd);
+      if (v.plan) await subActivate(c.id, { planId: v.plan, paid: v.paid, silent: true });
       publishFamily(c.id);
       toast('تم عمل الحساب ✅');
       if (!sib) setTimeout(() => openModal('بيانات الدخول', `<div class="card" style="white-space:pre-wrap">${esc(parentInvite(c, toDigits(v.phone), v.password))}</div>
@@ -387,7 +390,15 @@ async function bulkParents() {
         <div class="sub">الأطفال ← اختار الطفل ← تعديل ← تليفون ولي الأمر</div></div></div></div>` : '<p>كل الأطفال عندهم حسابات 👏</p>'}`);
     return;
   }
-  if (!confirm(`هيتعمل حساب لـ ${kids.length} ولي أمر (اللي ليهم رقم تليفون)، وبعدها تبعتلهم بيانات الدخول على الواتساب. متابعة؟`)) return;
+  const planId = await new Promise((res) => {
+    openModal('حسابات أولياء الأمور', `<p>هيتعمل حساب لـ <b>${num(kids.length)}</b> ولي أمر (اللي ليهم رقم تليفون)، وبعدها تبعتلهم بيانات الدخول على الواتساب.</p>
+      <div class="form"><label class="full">🎟️ اشتراك يتفعّل لكل الحسابات دي<select id="bulkPlan">${planOptions(true).filter((o) => o[0] !== 'custom').map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('')}</select></label>
+      <label class="full" style="flex-direction:row;gap:8px;align-items:center"><input type="checkbox" id="bulkPaid" style="width:auto"> اتدفع (يتسجل في المقبوضات)</label>
+      <div class="actions"><button class="btn primary" id="bulkGo">ابدأ</button><button class="btn" id="bulkCancel">إلغاء</button></div></div>`);
+    $('#bulkGo').onclick = () => { const v = { plan: $('#bulkPlan').value, paid: $('#bulkPaid').checked }; closeModal(); res(v); };
+    $('#bulkCancel').onclick = () => { closeModal(); res(null); };
+  });
+  if (!planId) return;
   const done = [];
   for (const c of kids) {
     const sib = D.children.find((x) => x.parentLogin && toDigits(x.parentLogin) === toDigits(c.phone));
@@ -395,6 +406,7 @@ async function bulkParents() {
     try {
       await Cloud.addParent({ childId: c.id, name: c.guardianName || `ولي أمر ${c.name}`, phone: c.phone, password: pin });
       await save('children', { ...child(c.id), parentLogin: toDigits(c.phone) });
+      if (planId.plan) await subActivate(c.id, { planId: planId.plan, paid: planId.paid, silent: true });
       publishFamily(c.id);
       done.push({ c, pin });
     } catch (e) { done.push({ c, err: e.code === 'exists' ? 'له حساب قديم' : authMsg(e) }); }

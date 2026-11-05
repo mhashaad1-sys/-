@@ -336,3 +336,12 @@ table.week td.t { white-space: nowrap; font-weight: 700; color: var(--purple); d
 .q-btn { border: 0; background: #fff; border-radius: 50%; width: 54px; height: 54px; font-size: 22px; box-shadow: 0 3px 0 #c8e6c9, 0 4px 10px #0001; }
 .q-btn.big { width: 76px; height: 76px; font-size: 32px; background: #2e7d32; color: #fff; box-shadow: 0 4px 0 #1b5e20; }
 .q-btn.on { background: #c8e6c9; }
+
+/* ===== الباقات ===== */
+.plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.plan { border: 2px solid var(--border); background: #fff; border-radius: 16px; padding: 12px 8px; display: flex; flex-direction: column; align-items: center; gap: 2px; font-family: inherit; }
+.plan b { font-size: 15px; color: #2d2640; } .plan .pp { font-size: 22px; font-weight: 900; color: var(--primary-dark); } .plan small { color: var(--muted); font-size: 12px; }
+.plan.on { border-color: var(--primary); background: #fff0f5; box-shadow: 0 3px 0 var(--primary); }
+.radio-row { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-bottom: 1px dashed var(--border); }
+.radio-row:last-child { border-bottom: 0; } .radio-row input { width: auto; margin-top: 4px; }
+details summary { cursor: pointer; }

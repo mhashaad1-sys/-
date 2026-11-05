@@ -120,6 +120,7 @@ const Cloud = {
       if (!m.exists) { this.status = 'noaccess'; this.onChange('status'); return; }
       role = m.data().role; this.name = m.data().name || '';
       this.childIds = m.data().childIds || [];
+      this.memberUntil = m.data().hwUntil || 0;
     }
     this.role = role;
 
@@ -135,7 +136,10 @@ const Cloud = {
     // لو المدير غيّر الصلاحية أو شال الحساب
     if (role !== 'owner') {
       this.unsubs.push(this.col('members').doc(this.email).onSnapshot((d) => {
-        if (!d.exists || d.data().role !== this.role || JSON.stringify(d.data().childIds || []) !== JSON.stringify(this.childIds)) location.reload();
+        if (!d.exists || d.data().role !== this.role || JSON.stringify(d.data().childIds || []) !== JSON.stringify(this.childIds)) { location.reload(); return; }
+        const was = this.memberUntil > Date.now(); this.memberUntil = d.data().hwUntil || 0;
+        if (!was && this.memberUntil > Date.now() && typeof subMode === 'function' && subMode() === 'app') { location.reload(); return; }
+        this.onChange('data');
       }, () => {}));
     }
     if (window.Android && window.Android.askNotifications) window.Android.askNotifications();

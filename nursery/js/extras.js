@@ -75,7 +75,8 @@ function copyText(t) {
 function instaCard(childName, amount, purpose = 'اشتراك الحضانة') {
   const s = settings(); const num1 = s.instapay || '';
   if (!num1) return '';
-  const note = `${purpose === 'اشتراك الحضانة' ? '' : 'تمارين '}${childName}`;
+  const who = childName || (typeof Cloud !== 'undefined' && Cloud.name) || '';
+  const note = purpose === 'اشتراك الحضانة' ? who : `${/تطبيق/.test(purpose) ? 'اشتراك' : 'تمارين'} ${who}`;
   return `<div class="insta">
     <div class="insta-head"><span class="insta-logo">⚡ InstaPay</span><span>${esc(purpose)}${amount ? ' · <b>' + money(amount) + '</b>' : ''}</span></div>
     <div class="insta-num" dir="ltr">${esc(num1)}</div>

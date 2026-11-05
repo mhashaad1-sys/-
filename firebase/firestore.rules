@@ -21,6 +21,10 @@ service cloud.firestore {
     function isStaff() { return isAdmin() || isAccountant() || isTeacher(); }
     function myKids() { return get(memberPath()).data.childIds; }
     function hwActive() { return isParent() && get(memberPath()).data.get('hwUntil', 0) > request.time.toMillis(); }
+    // لو الإدارة اختارت إن الاشتراك للتطبيق كله: ولي الأمر لازم يكون مشترك عشان يشوف بيانات طفله
+    function appOk() {
+      return get(/databases/$(database)/documents/org/baraem/settings/main).data.get('subMode', 'hw') != 'app' || hwActive();
+    }
 
     function canRead(c) {
       return isAdmin()
@@ -47,7 +51,7 @@ service cloud.firestore {
 
     // ملف كل طفل اللي ولي الأمر بيشوفه
     match /org/baraem/family/{cid} {
-      allow read: if isStaff() || (isParent() && cid in myKids());
+      allow read: if isStaff() || (isParent() && cid in myKids() && appOk());
       allow write: if isStaff();
     }
 
