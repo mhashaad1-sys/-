@@ -1,5 +1,5 @@
-const CACHE_NAME = 'baraem-cache-v7';
-const ASSETS = ['./', './index.html', './manifest.json', './css/style.css', './js/db.js', './js/seed.js', './js/xlsx.js', './js/cloud.js', './js/family.js', './js/extras.js', './js/homework.js', './js/learn.js', './vendor/firebase-app-compat.js', './vendor/firebase-auth-compat.js', './vendor/firebase-firestore-compat.js', './js/app.js', './img/logo-192.png', './img/apple-touch-icon.png', './img/banner.jpg'];
+const CACHE_NAME = 'baraem-cache-v8';
+const ASSETS = ['./', './index.html', './manifest.json', './css/style.css', './js/db.js', './js/seed.js', './js/xlsx.js', './js/cloud.js', './js/family.js', './js/extras.js', './js/homework.js', './js/learn.js', './img/quran/001.png', './img/quran/103.png', './img/quran/104.png', './img/quran/105.png', './img/quran/106.png', './img/quran/107.png', './img/quran/108.png', './img/quran/109.png', './img/quran/110.png', './img/quran/111.png', './img/quran/112.png', './img/quran/113.png', './img/quran/114.png', './vendor/firebase-app-compat.js', './vendor/firebase-auth-compat.js', './vendor/firebase-firestore-compat.js', './js/app.js', './img/logo-192.png', './img/apple-touch-icon.png', './img/banner.jpg'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE_NAME).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));

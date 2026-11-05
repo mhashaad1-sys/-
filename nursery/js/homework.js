@@ -230,13 +230,14 @@ function viewHomework() {
   };
 }
 function hwProgDetail(p) {
-  const SUBJ = { noor: 'نور البيان', en: 'English', math: 'الحساب', ar: 'العربي', sci: 'العالم حوالينا', val: 'قيم وآداب' };
+  const SUBJ = { noor: 'نور البيان', en: 'English', math: 'الحساب', ar: 'العربي', sci: 'العالم حوالينا', val: 'قيم وآداب', quran: 'القرآن (سور محفوظة)' };
   openModal(`📊 ${(child(p.childId) || {}).name || ''}`, `<div class="stats"><div class="stat green"><div class="label">دروس خلصها</div><div class="value">${num(p.done || 0)} / ${num(p.total || 0)}</div></div>
     <div class="stat purple"><div class="label">النقاط</div><div class="value">⭐ ${num(p.xp || 0)}</div></div>
     <div class="stat blue"><div class="label">وقت التدريب</div><div class="value">${num(p.minutes || 0)} د</div></div>
     <div class="stat"><div class="label">أيام التدريب</div><div class="value">${num(p.days || 0)}</div></div></div>
     ${Object.entries(p.subj || {}).map(([s, x]) => `<div class="bar-row"><div class="bar-label"><span>${SUBJ[s] || s}</span><b>${num(x.done)} / ${num(x.total)}${x.acc ? ' · دقة ' + num(x.acc) + '٪' : ''}</b></div>
       <div class="bar-track"><div class="bar-fill green" style="width:${x.total ? x.done / x.total * 100 : 0}%"></div></div></div>`).join('')}
+    ${(p.quranMemorized || []).length ? `<div class="alert" style="background:#eaf6ec;color:#1b5e20">📖 حفظ: ${p.quranMemorized.map((n) => 'سورة ' + esc(n)).join('، ')}</div>` : ''}
     ${(p.recent || []).length ? `<h3>آخر الدروس</h3><div class="list">${p.recent.map((r) => `<div class="item"><div class="main"><div class="title">${esc(r.n)}</div></div><span>${'⭐'.repeat(r.stars || 0)} ${num(r.acc)}٪</span></div>`).join('')}</div>` : ''}
     ${(p.scores || []).length ? `<h3>النتايج</h3><div class="list">${p.scores.slice(-10).reverse().map((r) => `<div class="item"><div class="main"><div class="title">${esc(r.title || 'تمرين')}</div><div class="sub">${new Date(r.at).toLocaleDateString('ar-EG')}</div></div><b>${num(r.score)}${r.total ? ' / ' + num(r.total) : ''}</b></div>`).join('')}</div>` : ''}`);
 }

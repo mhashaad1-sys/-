@@ -190,9 +190,11 @@ function learnSummary(st) {
   const subj = {};
   LESSONS.forEach((l) => { const x = subj[l.subject] = subj[l.subject] || { done: 0, total: 0, acc: [] }; x.total++; const s = st.lessons[l.id]; if (s && s.stars) { x.done++; x.acc.push(s.acc); } });
   Object.values(subj).forEach((x) => { x.acc = x.acc.length ? Math.round(x.acc.reduce((a, b) => a + b, 0) / x.acc.length) : 0; });
-  const done = Object.entries(st.lessons).filter(([, v]) => v.stars).sort((a, b) => b[1].last - a[1].last);
+  const qm = SURAHS.filter((s) => ((st.quran || {})[s.id] || {}).memorized);
+  subj.quran = { done: qm.length, total: SURAHS.length, acc: 0 };
+  const done = Object.entries(st.lessons).filter(([id, v]) => v.stars && LESSONS.some((l) => l.id === id)).sort((a, b) => b[1].last - a[1].last);
   return { title: 'منهج براعم (KG)', xp: st.xp, stars: done.reduce((a, [, v]) => a + v.stars, 0), minutes: Math.round(st.ms / 60000), days: Object.keys(st.days).length,
-    done: done.length, total: LESSONS.length, subj, last: new Date().toISOString(), lastDay: Object.keys(st.days).sort().pop() || '',
+    done: done.length, total: LESSONS.length, subj, quranMemorized: qm.map((s) => s.name), last: new Date().toISOString(), lastDay: Object.keys(st.days).sort().pop() || '',
     recent: done.slice(0, 6).map(([id, v]) => ({ n: `${SUBJECTS[(LESSONS.find((l) => l.id === id) || {}).subject]?.name || ''}: ${(LESSONS.find((l) => l.id === id) || {}).title || id}`, stars: v.stars, acc: v.acc })) };
 }
 function learnSave(L) {
@@ -209,7 +211,7 @@ function learnSave(L) {
 // ---------- الشاشة ----------
 let LRN = null;
 function lessonOpen(L, lesson) {
-  if (L.preview || L.active) return true;
+  if (L.preview || L.active || lesson.subject === 'quran') return true;
   return LESSONS.filter((x) => x.subject === lesson.subject).indexOf(lesson) === 0; // أول درس في كل مادة مجاني
 }
 async function openLearn(subject) {
@@ -224,7 +226,7 @@ async function openLearn(subject) {
 }
 function closeLearn(fromPop) {
   if (!LRN) return false;
-  stopSpeak();
+  stopSpeak(); quranStop();
   if (LRN.q && LRN.t0) { LRN.st.ms += Date.now() - LRN.t0; learnSave(LRN); }
   const ov = document.querySelector('.learn'); if (ov) ov.remove();
   LRN = null;
@@ -237,16 +239,21 @@ function learnRender() {
   const L = LRN, ov = document.querySelector('.learn'); if (!L || !ov) return;
   const totalStars = Object.values(L.st.lessons).reduce((a, v) => a + (v.stars || 0), 0);
   const bar = `<div class="lr-bar"><button class="lr-x" data-action="learnBack">${L.screen === 'home' ? '✕' : '→'}</button>
-    <b>${L.screen === 'play' ? esc(L.lesson.title) : L.screen === 'lessons' ? SUBJECTS[L.subject].name : `يلا نتعلّم يا ${esc(L.name)} 🌱`}</b><span class="lr-stars">⭐ ${num(totalStars)}</span></div>`;
+    <b>${L.screen === 'surah' ? `سورة ${SURAHS.find((x) => x.id === L.sid).name}` : L.screen === 'play' ? esc(L.lesson.title) : L.screen === 'lessons' ? SUBJECTS[L.subject].name : `يلا نتعلّم يا ${esc(L.name)} 🌱`}</b><span class="lr-stars">⭐ ${num(totalStars)}</span></div>`;
   let body = '';
   if (L.screen === 'home') {
     body = `<div class="lr-hello"><div class="mascot">🐣</div><div>${g2('أهلاً يا بطل!', 'أهلاً يا بطلة!')} ${L.preview ? '<span class="badge orange">معاينة للحضانة</span>' : ''}<br><small>اختار${g2('', 'ي')} المادة اللي ${g2('عايز', 'عايزة')} تتعلّم${g2('ها', 'يها')}</small></div></div>
       <div class="lr-subjects">${Object.entries(SUBJECTS).map(([id, s]) => {
-        const ls = LESSONS.filter((l) => l.subject === id), d = ls.filter((l) => (L.st.lessons[l.id] || {}).stars).length;
-        return `<button class="lr-subj" style="--c:${s.color}" data-action="learnSubj" data-s="${id}"><span class="ico">${s.icon}</span><b>${s.name}</b><small>${num(d)} / ${num(ls.length)} درس</small>
+        const ls = id === 'quran' ? SURAHS : LESSONS.filter((l) => l.subject === id);
+        const d = id === 'quran' ? SURAHS.filter((s) => ((L.st.quran || {})[s.id] || {}).memorized).length : ls.filter((l) => (L.st.lessons[l.id] || {}).stars).length;
+        return `<button class="lr-subj" style="--c:${s.color}" data-action="learnSubj" data-s="${id}"><span class="ico">${s.icon}</span><b>${s.name}</b><small>${num(d)} / ${num(ls.length)} ${id === 'quran' ? 'سورة' : 'درس'}</small>
           <span class="lr-prog"><i style="width:${ls.length ? d / ls.length * 100 : 0}%"></i></span></button>`;
       }).join('')}</div>
       ${!L.active ? `<div class="lr-lock">🔒 أول درس في كل مادة مجاني. اشترك${g2('', 'ي')} عشان كل الدروس تتفتح.</div>` : ''}`;
+  } else if (L.screen === 'lessons' && L.subject === 'quran') {
+    body = `<div class="lr-lessons">${quranLessonsHTML()}</div>`;
+  } else if (L.screen === 'surah') {
+    body = quranSurahHTML(L.sid);
   } else if (L.screen === 'lessons') {
     const ls = LESSONS.filter((l) => l.subject === L.subject);
     body = `<div class="lr-lessons">${['KG1', 'KG2'].map((lv) => `<h3>${lv}</h3>${ls.filter((l) => l.level === lv).map((l) => {
@@ -269,7 +276,7 @@ function learnRender() {
     body = `<div class="lr-done"><div class="big-stars">${'⭐'.repeat(r.stars)}${'☆'.repeat(3 - r.stars)}</div>
       <h2>${r.stars === 3 ? g2('ممتاز يا بطل! 🏆', 'ممتازة يا بطلة! 🏆') : r.stars === 2 ? g2('شاطر جدًا! 👏', 'شاطرة جدًا! 👏') : r.stars === 1 ? g2('برافو عليك! 🌟', 'برافو عليكي! 🌟') : 'يلا نجرّب تاني 💪'}</h2>
       <p>جاوبت صح ${num(r.correct)} من ${num(r.total)}</p><p class="xp">+${num(r.xp)} نقطة ✨</p>
-      <div class="btn-row" style="justify-content:center"><button class="btn" data-action="learnStart" data-id="${L.lesson.id}">🔁 تاني</button>
+      <div class="btn-row" style="justify-content:center"><button class="btn" data-action="${L.lesson.id === 'quran-quiz' ? 'quranQuiz' : 'learnStart'}" data-id="${L.lesson.id}">🔁 تاني</button>
       ${r.next ? `<button class="btn primary" data-action="learnStart" data-id="${r.next.id}">الدرس اللي بعده ←</button>` : ''}
       <button class="btn" data-action="learnSubj" data-s="${L.lesson.subject}">الدروس</button></div></div>`;
   }
@@ -290,12 +297,13 @@ function learnNext() {
   L.q = fn(...args); L.tries = 0;
   learnRender();
   const q = L.q;
-  setTimeout(() => { if (LRN && LRN.q === q) speak(...q.say); }, 250);
+  setTimeout(() => { if (!LRN || LRN.q !== q) return; if (q.audio) { quranStop(); QA = { sid: -1 }; QA.audio = playClip(q.audio[0], q.audio[1], () => {}); } else speak(...q.say); }, 250);
 }
 async function learnAnswer(i, el) {
   const L = LRN, q = L.q, o = q.options[i];
   if (L.locked) return;
   if (o.say) speak(...o.say);
+  if (q.audio) quranStop();
   if (o.value === q.answer) {
     L.locked = true; el.classList.add('right'); chime(true);
     if (L.tries === 0) { L.correct++; L.score += 1; } else L.score += .5;
@@ -316,7 +324,7 @@ function learnAdvance() {
   L.st.lessons[L.lesson.id] = { stars: Math.max(prev.stars || 0, stars), acc: Math.max(prev.acc || 0, acc), tries: (prev.tries || 0) + 1, last: Date.now() };
   L.st.xp += xp; L.st.ms += Date.now() - L.t0; L.t0 = 0;
   const d = today(); L.st.days[d] = (L.st.days[d] || 0) + 1;
-  const subjLs = LESSONS.filter((x) => x.subject === L.lesson.subject), ni = subjLs.findIndex((x) => x.id === L.lesson.id) + 1;
+  const subjLs = LESSONS.filter((x) => x.subject === L.lesson.subject), ni = subjLs.length ? subjLs.findIndex((x) => x.id === L.lesson.id) + 1 : 0;
   const next = subjLs[ni] && lessonOpen(L, subjLs[ni]) ? subjLs[ni] : null;
   L.result = { stars, correct: L.correct, total, xp, next };
   L.screen = 'done'; L.q = null;
@@ -385,11 +393,11 @@ function learnCard(k) {
 
 Object.assign(ACTIONS_EXTRA, {
   learnOpen: (el) => openLearn(el.dataset.s),
-  learnBack: () => { if (!LRN) return; if (LRN.screen === 'home') closeLearn(false); else if (LRN.screen === 'lessons') { LRN.screen = 'home'; learnRender(); } else { stopSpeak(); if (LRN.t0) { LRN.st.ms += Date.now() - LRN.t0; LRN.t0 = 0; learnSave(LRN); } LRN.screen = 'lessons'; LRN.subject = LRN.lesson.subject; learnRender(); } },
-  learnSubj: (el) => { stopSpeak(); LRN.screen = 'lessons'; LRN.subject = el.dataset.s; learnRender(); },
+  learnBack: () => { if (!LRN) return; quranStop(); if (LRN.screen === 'surah') { LRN.screen = 'lessons'; LRN.subject = 'quran'; learnRender(); return; } if (LRN.screen === 'home') closeLearn(false); else if (LRN.screen === 'lessons') { LRN.screen = 'home'; learnRender(); } else { stopSpeak(); if (LRN.t0) { LRN.st.ms += Date.now() - LRN.t0; LRN.t0 = 0; learnSave(LRN); } LRN.screen = 'lessons'; LRN.subject = LRN.lesson.subject; learnRender(); } },
+  learnSubj: (el) => { stopSpeak(); quranStop(); LRN.screen = 'lessons'; LRN.subject = el.dataset.s; learnRender(); },
   learnStart: (el) => learnStart(el.dataset.id),
   learnLocked: () => { toast('🔒 اشترك عشان الدرس ده يتفتح'); speak('الدرس ده للمشتركين', 'ar'); },
-  learnSay: () => { if (LRN && LRN.q) speak(...LRN.q.say); },
+  learnSay: () => { if (!LRN || !LRN.q) return; if (LRN.q.audio) { quranStop(); QA = { sid: -1 }; QA.audio = playClip(LRN.q.audio[0], LRN.q.audio[1], () => {}); } else speak(...LRN.q.say); },
   learnAns: (el) => learnAnswer(Number(el.dataset.i), el),
   traceClear: () => setupTrace(LRN.q.letter),
   traceDone: async () => {
@@ -397,4 +405,97 @@ Object.assign(ACTIONS_EXTRA, {
     if (s > 0) { LRN.score += s; if (s === 1) LRN.correct++; chime(true); await speak(s === 1 ? g2('برافو! كتبته صح', 'برافو! كتبتيه صح') : 'كويس! حاول تكتبه أحسن المرة الجاية', 'ar'); learnAdvance(); }
     else { chime(false); LRN.tries++; speak(g2('امشي على النقط وحاول تاني', 'امشي على النقط وحاولي تاني'), 'ar'); if (LRN.tries >= 3) learnAdvance(); }
   },
+});
+
+// ================== القرآن الكريم ==================
+// النص صور من مصحف المدينة نفسه (مش مكتوب باليد)، والصوت تلاوة الشيخ محمود خليل الحصري (المعلّم)
+// من everyayah.com. مفيش أي نطق للقرآن بصوت الكمبيوتر. القسم ده مجاني لكل الأطفال.
+const SURAHS = [
+  { id: 1, name: 'الفاتحة', ayat: 7 }, { id: 112, name: 'الإخلاص', ayat: 4 }, { id: 113, name: 'الفلق', ayat: 5 }, { id: 114, name: 'الناس', ayat: 6 },
+  { id: 108, name: 'الكوثر', ayat: 3 }, { id: 103, name: 'العصر', ayat: 3 }, { id: 110, name: 'النصر', ayat: 3 }, { id: 105, name: 'الفيل', ayat: 5 },
+  { id: 106, name: 'قريش', ayat: 4 }, { id: 107, name: 'الماعون', ayat: 7 }, { id: 109, name: 'الكافرون', ayat: 6 }, { id: 111, name: 'المسد', ayat: 5 },
+  { id: 104, name: 'الهمزة', ayat: 9 },
+];
+const RECITERS = ['Husary_Muallim_128kbps', 'Husary_128kbps'];
+const ayahUrl = (s, a, r = 0) => `https://everyayah.com/data/${RECITERS[r]}/${String(s).padStart(3, '0')}${String(a).padStart(3, '0')}.mp3`;
+(() => { const rest = { ...SUBJECTS }; Object.keys(SUBJECTS).forEach((k) => delete SUBJECTS[k]); Object.assign(SUBJECTS, { quran: { name: 'القرآن الكريم', icon: '📖', color: '#2e7d32' } }, rest); })();
+
+let QA = null; // التلاوة الحالية
+function quranStop() { if (QA && QA.audio) { QA.audio.onended = QA.audio.onerror = null; try { QA.audio.pause(); } catch (e) { /* ignore */ } } QA = null; }
+function playClip(s, a, onEnd, r = 0) {
+  const au = new Audio(ayahUrl(s, a, r));
+  au.onended = () => onEnd && onEnd(true);
+  au.onerror = () => { if (r + 1 < RECITERS.length) { const x = playClip(s, a, onEnd, r + 1); if (QA) QA.audio = x; } else { toast('📶 التلاوة محتاجة إنترنت'); onEnd && onEnd(false); } };
+  au.play().catch(() => {});
+  return au;
+}
+function quranPlay(sid, from = 0, repeat = false) {
+  stopSpeak(); quranStop();
+  const s = SURAHS.find((x) => x.id === sid);
+  const list = (sid !== 1 ? [[1, 1, 'البسملة']] : []).concat([...Array(s.ayat)].map((_, i) => [sid, i + 1, `الآية ${arDigits(i + 1)}`]));
+  QA = { sid, list, i: Math.min(from, list.length - 1), repeat, playing: true };
+  const step = () => {
+    if (!QA || QA.sid !== sid) return;
+    const [ss, aa] = QA.list[QA.i];
+    QA.audio = playClip(ss, aa, (ok) => {
+      if (!QA || QA.sid !== sid) return;
+      if (!ok) { QA.playing = false; learnRender(); return; }
+      if (QA.repeat) { step(); return; }
+      if (QA.i + 1 < QA.list.length) { QA.i++; learnRender(); step(); }
+      else { QA.playing = false; quranMark(sid, 'listened'); learnRender(); }
+    });
+    learnRender();
+  };
+  step();
+}
+function quranState(sid) { const q = (LRN.st.quran = LRN.st.quran || {}); return (q[sid] = q[sid] || { listened: 0, memorized: false }); }
+function quranMark(sid, what) {
+  if (!LRN) return;
+  const q = quranState(sid);
+  if (what === 'listened') { q.listened++; LRN.st.xp += 2; }
+  if (what === 'memorized') { q.memorized = !q.memorized; if (q.memorized) { LRN.st.xp += 20; confetti(); chime(true); } }
+  q.last = Date.now(); LRN.st.days[today()] = (LRN.st.days[today()] || 0) + 1;
+  learnSave(LRN);
+}
+function quranLessonsHTML() {
+  const L = LRN;
+  return `<div class="q-note">📖 النص صور من مصحف المدينة، والتلاوة بصوت الشيخ محمود خليل الحصري (المعلّم) — ${g2('اسمع وردّد وراه', 'اسمعي ورددي وراه')}.</div>
+    <button class="lr-lesson" style="--c:#2e7d32" data-action="quranQuiz"><span class="t">🎧 اسمع واعرف اسم السورة</span><span class="s">🎮</span></button>
+    ${SURAHS.map((s) => { const q = (L.st.quran || {})[s.id] || {}; return `<button class="lr-lesson" style="--c:#2e7d32" data-action="quranOpen" data-id="${s.id}">
+      <span class="t">سورة ${s.name} <small class="sub">(${arDigits(s.ayat)} آيات)</small></span><span class="s">${q.memorized ? '✅ حفظها' : q.listened ? `🎧 ${arDigits(q.listened)}` : '▶️'}</span></button>`; }).join('')}`;
+}
+function quranSurahHTML(sid) {
+  const s = SURAHS.find((x) => x.id === sid), q = (LRN.st.quran || {})[sid] || {}, on = QA && QA.sid === sid;
+  const cur = on ? QA.list[QA.i][2] : '';
+  return `<div class="mushaf"><img src="img/quran/${String(sid).padStart(3, '0')}.png" alt="سورة ${s.name}"></div>
+    <div class="q-now">${on ? `${QA.playing ? '🔊' : '⏸'} ${cur}${QA.repeat ? ' · 🔁 بتتكرر' : ''}` : g2('اضغط ▶️ واسمع ورا الشيخ', 'اضغطي ▶️ واسمعي ورا الشيخ')}</div>
+    <div class="q-ctrl">
+      <button class="q-btn" data-action="quranPrev">⏮</button>
+      <button class="q-btn big" data-action="${on && QA.playing ? 'quranPause' : 'quranPlay'}" data-id="${sid}">${on && QA.playing ? '⏸' : '▶️'}</button>
+      <button class="q-btn" data-action="quranNext">⏭</button>
+      <button class="q-btn ${on && QA.repeat ? 'on' : ''}" data-action="quranRepeat" data-id="${sid}" title="كرر الآية">🔁</button>
+    </div>
+    <button class="btn block ${q.memorized ? 'green' : 'primary'}" style="margin-top:12px" data-action="quranMemo" data-id="${sid}">${q.memorized ? `✅ ${g2('حافظها', 'حافظاها')} — برافو!` : `⭐ ${g2('حفظتها!', 'حفظتها!')}`}</button>
+    <div class="sub" style="text-align:center;margin-top:6px">سمعها ${arDigits(q.listened || 0)} مرة</div>`;
+}
+function quranQuizStart() {
+  const pool = SURAHS.filter((s) => s.id !== 1 || true);
+  const qs = [];
+  for (let i = 0; i < 6; i++) qs.push([quranQuizQ, [pool]]);
+  Object.assign(LRN, { screen: 'play', lesson: { id: 'quran-quiz', subject: 'quran', title: 'اسمع واعرف السورة', qs }, i: 0, correct: 0, score: 0, tries: 0, t0: Date.now() });
+  learnNext();
+}
+function quranQuizQ(pool) {
+  const s = pick(pool), opts = shuffle([s, ...others(SURAHS, s, 2, (x) => x.id)]);
+  return { audio: [s.id, s.id === 1 ? 2 : 1], text: 'اسمع… دي سورة إيه؟', show: '<div class="emo xl">🎧</div>', options: opts.map((x) => opt(x.id, `<span class="val">سورة ${x.name}</span>`)), answer: s.id, cols: 1 };
+}
+Object.assign(ACTIONS_EXTRA, {
+  quranOpen: (el) => { quranStop(); LRN.screen = 'surah'; LRN.sid = Number(el.dataset.id); learnRender(); },
+  quranPlay: (el) => { const sid = Number(el.dataset.id); if (QA && QA.sid === sid && !QA.playing && QA.audio) { QA.playing = true; QA.audio.play().catch(() => {}); learnRender(); } else quranPlay(sid, 0); },
+  quranPause: () => { if (QA && QA.audio) { QA.audio.pause(); QA.playing = false; learnRender(); } },
+  quranNext: () => { if (QA && QA.i + 1 < QA.list.length) quranPlay(QA.sid, QA.i + 1, QA.repeat); },
+  quranPrev: () => { if (QA) quranPlay(QA.sid, Math.max(0, QA.i - 1), QA.repeat); },
+  quranRepeat: (el) => { const sid = Number(el.dataset.id); if (QA && QA.sid === sid) { QA.repeat = !QA.repeat; learnRender(); } else quranPlay(sid, 0, true); },
+  quranMemo: (el) => { quranMark(Number(el.dataset.id), 'memorized'); learnRender(); },
+  quranQuiz: () => { quranStop(); quranQuizStart(); },
 });

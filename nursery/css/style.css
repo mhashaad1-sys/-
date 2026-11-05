@@ -327,3 +327,12 @@ table.week td.t { white-space: nowrap; font-weight: 700; color: var(--purple); d
 .learn-card { border: 2px solid #f3d9e6; background: linear-gradient(135deg, #fff, #fff6fb); }
 .lr-mini { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .lr-chip { border: 0; background: #fff; border-radius: 14px; padding: 6px 10px; box-shadow: 0 2px 0 var(--c); font-family: inherit; font-size: 13px; }
+/* ===== القرآن الكريم ===== */
+.q-note { background: #eaf6ec; color: #1b5e20; border-radius: 14px; padding: 10px 12px; font-size: 13px; margin-bottom: 10px; line-height: 1.6; }
+.mushaf { background: #fffdf6; border-radius: 18px; padding: 10px; box-shadow: 0 4px 14px #0002; border: 3px double #c9a227; }
+.mushaf img { width: 100%; display: block; }
+.q-now { text-align: center; font-weight: 800; color: #2e7d32; margin: 12px 0 6px; font-size: 17px; }
+.q-ctrl { display: flex; justify-content: center; align-items: center; gap: 12px; }
+.q-btn { border: 0; background: #fff; border-radius: 50%; width: 54px; height: 54px; font-size: 22px; box-shadow: 0 3px 0 #c8e6c9, 0 4px 10px #0001; }
+.q-btn.big { width: 76px; height: 76px; font-size: 32px; background: #2e7d32; color: #fff; box-shadow: 0 4px 0 #1b5e20; }
+.q-btn.on { background: #c8e6c9; }
