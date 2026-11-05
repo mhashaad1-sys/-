@@ -345,3 +345,12 @@ table.week td.t { white-space: nowrap; font-weight: 700; color: var(--purple); d
 .radio-row { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-bottom: 1px dashed var(--border); }
 .radio-row:last-child { border-bottom: 0; } .radio-row input { width: auto; margin-top: 4px; }
 details summary { cursor: pointer; }
+
+/* ===== التقييم والشهادات ===== */
+.eval-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px dashed var(--border); font-size: 14px; }
+.eval-row .st { letter-spacing: 1px; font-size: 13px; }
+.award-card { display: flex; gap: 12px; align-items: center; background: linear-gradient(135deg, #fff8e1, #fff0f5); border: 2px solid #ffe08a; }
+.aw-ico { font-size: 44px; }
+.cert-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; }
+.cert-chip { border: 0; background: #fff; border-radius: 16px; padding: 10px 6px; box-shadow: 0 3px 0 #ffd54f; display: flex; flex-direction: column; align-items: center; gap: 2px; font-family: inherit; }
+.cert-chip span { font-size: 32px; } .cert-chip b { font-size: 13px; } .cert-chip small { font-size: 11px; color: var(--muted); }

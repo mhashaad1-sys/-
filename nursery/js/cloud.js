@@ -14,8 +14,8 @@ const FIREBASE_CONFIG = {
 const ORG_ID = 'baraem';
 
 const ROLES = { owner: 'صاحبة الحضانة', admin: 'مدير/ة', accountant: 'محاسب/ة', teacher: 'معلمة / مشرفة', parent: 'ولي أمر' };
-const ALL_STORES = ['settings', 'classes', 'children', 'attendance', 'payments', 'expenses', 'staff', 'notes', 'staffAtt', 'staffTx', 'schedule', 'requests', 'announcements', 'reports', 'homework', 'hwProg'];
-const BASIC_STORES = ['settings', 'classes', 'children', 'attendance', 'notes', 'schedule', 'requests', 'announcements', 'reports', 'homework', 'hwProg'];
+const ALL_STORES = ['settings', 'classes', 'children', 'attendance', 'payments', 'expenses', 'staff', 'notes', 'staffAtt', 'staffTx', 'schedule', 'requests', 'announcements', 'reports', 'homework', 'hwProg', 'evals', 'awards'];
+const BASIC_STORES = ['settings', 'classes', 'children', 'attendance', 'notes', 'schedule', 'requests', 'announcements', 'reports', 'homework', 'hwProg', 'evals', 'awards'];
 const CLOUD_READ = {
   admin: ALL_STORES,
   accountant: [...BASIC_STORES, 'payments', 'expenses', 'staff', 'staffTx', 'staffAtt'],
@@ -24,8 +24,8 @@ const CLOUD_READ = {
 };
 const CLOUD_WRITE = {
   admin: ALL_STORES,
-  accountant: ['attendance', 'notes', 'schedule', 'requests', 'reports', 'children', 'payments', 'expenses', 'staff', 'staffTx'],
-  teacher: ['attendance', 'notes', 'schedule', 'requests', 'reports'],
+  accountant: ['attendance', 'notes', 'schedule', 'requests', 'reports', 'evals', 'awards', 'children', 'payments', 'expenses', 'staff', 'staffTx'],
+  teacher: ['attendance', 'notes', 'schedule', 'requests', 'reports', 'evals', 'awards'],
   parent: [],
 };
 // حسابات أولياء الأمور بتتعمل برقم الموبايل (بيتحول لإيميل داخلي)

@@ -65,6 +65,9 @@ function parentNotify(kind, cid, before, after) {
     }
     const d = today(), a0 = (before.att || {})[d], a1 = (after.att || {})[d];
     if (a1 && (!a0 || a0.s !== a1.s)) sysNotify(`${a1.s === 'absent' ? '❌' : '✅'} ${name}`, a1.s === 'absent' ? 'متسجل غياب النهارده' : `وصل الحضانة${a1.i ? ' الساعة ' + a1.i : ''}`);
+    (after.awards || []).filter((a) => !(before.awards || []).some((b) => b.id === a.id)).forEach((a) => sysNotify(`🏆 ${name} خد شهادة: ${a.title}`, certReason(a, after.gender)));
+    const e0 = (before.evals || [])[0], e1 = (after.evals || [])[0];
+    if (e1 && (!e0 || e0.month !== e1.month)) sysNotify(`📊 تقييم ${name} لشهر ${monthLabel(e1.month)} وصل`, e1.comment || 'افتح التطبيق وشوف التقييم');
     const r0 = (before.reports || {})[d], r1 = (after.reports || {})[d];
     if (r1 && !r0) sysNotify(`📋 تقرير ${name} النهارده وصل`, reportText({ ...r1, date: d }, name).split('\n').slice(1, 4).join(' · '));
     if (a1 && a1.o && (!a0 || !a0.o)) sysNotify(`🚪 ${name}`, `خرج من الحضانة الساعة ${a1.o}`);
@@ -92,6 +95,8 @@ function publishFamily(cid) {
     childId: cid, name: c.name, className: className(c.classId), photo: c.photo || '', birthDate: c.birthDate || '', gender: c.gender || '',
     medical: c.medical || '', pickup: c.pickup || '', active: c.active !== false, classId: c.classId || '', att,
     hw: { until: c.hwUntil || '', plan: c.hwPlan || '' },
+    evals: D.evals.filter((e) => e.childId === cid).sort((a, b) => b.month.localeCompare(a.month)).slice(0, 6).map((e) => { const x = { ...e }; delete x.id; delete x.childId; return x; }),
+    awards: D.awards.filter((a) => a.childId === cid).sort((a, b) => (b.date + b.id).localeCompare(a.date + a.id)).slice(0, 30).map((a) => { const x = { ...a }; delete x.childId; return x; }),
     reports: Object.fromEntries(D.reports.filter((r) => r.childId === cid && r.date >= cutoff.slice(0, 8) + '01').map((r) => { const x = { ...r }; delete x.id; delete x.childId; return [r.date, x]; })),
     notes: D.notes.filter((n) => n.childId === cid && n.share !== false).sort((a, b) => (b.date + b.id).localeCompare(a.date + a.id)).slice(0, 30).map((n) => ({ d: n.date, k: n.kind, t: n.text })),
   };
@@ -150,6 +155,8 @@ function viewPHome() {
   ${fb && fb.balance > 0 ? `<div class="card due-card">${new Date().getDate() <= 10 && fb.thisRemaining ? `<div class="month-hello">🌸 أهلاً بشهر ${new Date().toLocaleDateString('ar-EG', { month: 'long' })}</div>` : ''}
     <b>💵 مستحق على ${esc(k.name)}: ${money(fb.balance)}</b>
     ${instaCard(k.name, fb.balance)}${s.payInfo ? `<div class="sub" style="white-space:pre-wrap;margin-top:6px">${esc(s.payInfo)}</div>` : ''}</div>` : ''}
+  ${(k.awards || [])[0] && (k.awards[0].date >= addDaysStr(-7)) ? `<div class="card award-card clickable" data-action="pCert" data-id="${k.awards[0].id}"><span class="aw-ico">${k.awards[0].icon}</span><div><b>${esc(k.name)} خد شهادة «${esc(k.awards[0].title)}» 🎉</b><div class="sub">${esc(certReason(k.awards[0], k.gender))} — اضغط تشوف الشهادة</div></div></div>` : ''}
+  ${(k.evals || [])[0] && k.evals[0].month >= addMonths(thisMonth(), -1) ? `<div class="card">${evalCardHTML(k.evals[0], k.name)}</div>` : ''}
   ${(k.reports || {})[t] ? `<div class="card rep-view"><h3>📋 تقرير ${esc(k.name)} النهارده</h3>${repViewHTML((k.reports || {})[t])}</div>` : ''}
   <div class="quick">
     <button data-action="newReq" data-type="absence"><span>🏠</span>طلب غياب</button>
@@ -239,6 +246,8 @@ function viewPMore() {
     <div class="sub">${esc(toDigits(Cloud.email.split('@')[0]))} · ${ROLES.parent}</div><div class="sub">${syncLabel()}</div></div></div>
     <div class="btn-row" style="margin-top:10px">${notifyButton()}${calendarButton('parent')}<button class="btn small" data-action="logout">🚪 تسجيل خروج</button></div></div>
   ${IS_IOS && !IS_STANDALONE ? `<div class="card">${iosInstallHTML()}</div>` : ''}
+  ${(k.awards || []).length ? `<div class="section-title"><h3>🏆 شهادات ${esc(k.name || '')}</h3></div><div class="cert-grid">${k.awards.map((a) => `<button class="cert-chip" data-action="pCert" data-id="${a.id}"><span>${a.icon}</span><b>${esc(a.title)}</b><small>${dateLabel(a.date)}</small></button>`).join('')}</div>` : ''}
+  ${(k.evals || []).length ? `<div class="section-title"><h3>📊 التقييمات الشهرية</h3></div>${k.evals.map((e) => `<div class="card">${evalCardHTML(e, k.name)}</div>`).join('')}` : ''}
   <div class="card" style="text-align:center"><img src="img/logo-192.png" style="width:90px" alt=""><h3 style="margin:6px 0">${esc(s.name)}</h3><div class="slogan">${esc(s.slogan)}</div>
     <p>📍 ${esc(s.address)}</p>
     <div class="btn-row" style="justify-content:center"><a class="btn green" href="tel:${esc(s.phone)}">📞 اتصال بالحضانة</a>
@@ -443,3 +452,5 @@ function repViewHTML(r, compact) {
   const items = Object.keys(REPORT_FIELDS).filter((f) => r[f]).map((f) => `<span class="rep-chip">${REPORT_FIELDS[f].icon} ${REPORT_FIELDS[f].label}: <b>${esc(optLabel(f, r[f]))}</b></span>`);
   return `<div class="rep-chips${compact ? ' compact' : ''}">${items.join('')}</div>${r.activity ? `<div class="sub">🎨 ${esc(r.activity)}</div>` : ''}${r.note ? `<div class="sub">📝 ${esc(r.note)}</div>` : ''}`;
 }
+
+function addDaysStr(n) { const d = new Date(); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }

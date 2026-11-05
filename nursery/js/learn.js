@@ -414,7 +414,9 @@ const SURAHS = [
   { id: 1, name: 'الفاتحة', ayat: 7 }, { id: 112, name: 'الإخلاص', ayat: 4 }, { id: 113, name: 'الفلق', ayat: 5 }, { id: 114, name: 'الناس', ayat: 6 },
   { id: 108, name: 'الكوثر', ayat: 3 }, { id: 103, name: 'العصر', ayat: 3 }, { id: 110, name: 'النصر', ayat: 3 }, { id: 105, name: 'الفيل', ayat: 5 },
   { id: 106, name: 'قريش', ayat: 4 }, { id: 107, name: 'الماعون', ayat: 7 }, { id: 109, name: 'الكافرون', ayat: 6 }, { id: 111, name: 'المسد', ayat: 5 },
-  { id: 104, name: 'الهمزة', ayat: 9 },
+  { id: 104, name: 'الهمزة', ayat: 9 }, { id: 102, name: 'التكاثر', ayat: 8 }, { id: 101, name: 'القارعة', ayat: 11 }, { id: 100, name: 'العاديات', ayat: 11 },
+  { id: 99, name: 'الزلزلة', ayat: 8 }, { id: 97, name: 'القدر', ayat: 5 }, { id: 95, name: 'التين', ayat: 8 }, { id: 94, name: 'الشرح', ayat: 8 },
+  { id: 93, name: 'الضحى', ayat: 11 }, { id: 96, name: 'العلق', ayat: 19 },
 ];
 const RECITERS = ['Husary_Muallim_128kbps', 'Husary_128kbps'];
 const ayahUrl = (s, a, r = 0) => `https://everyayah.com/data/${RECITERS[r]}/${String(s).padStart(3, '0')}${String(a).padStart(3, '0')}.mp3`;
@@ -476,6 +478,7 @@ function quranSurahHTML(sid) {
       <button class="q-btn ${on && QA.repeat ? 'on' : ''}" data-action="quranRepeat" data-id="${sid}" title="كرر الآية">🔁</button>
     </div>
     <button class="btn block ${q.memorized ? 'green' : 'primary'}" style="margin-top:12px" data-action="quranMemo" data-id="${sid}">${q.memorized ? `✅ ${g2('حافظها', 'حافظاها')} — برافو!` : `⭐ ${g2('حفظتها!', 'حفظتها!')}`}</button>
+    ${q.memorized && isParent() ? `<button class="btn block" style="margin-top:8px" data-action="quranCert" data-id="${sid}">🏆 شهادة حفظ سورة ${s.name}</button>` : ''}
     <div class="sub" style="text-align:center;margin-top:6px">سمعها ${arDigits(q.listened || 0)} مرة</div>`;
 }
 function quranQuizStart() {
@@ -498,4 +501,5 @@ Object.assign(ACTIONS_EXTRA, {
   quranRepeat: (el) => { const sid = Number(el.dataset.id); if (QA && QA.sid === sid) { QA.repeat = !QA.repeat; learnRender(); } else quranPlay(sid, 0, true); },
   quranMemo: (el) => { quranMark(Number(el.dataset.id), 'memorized'); learnRender(); },
   quranQuiz: () => { quranStop(); quranQuizStart(); },
+  quranCert: (el) => { const s = SURAHS.find((x) => x.id === Number(el.dataset.id)), k = curKid(); showCertificate({ icon: '📖', title: 'حفظ سورة', reason: `لحفظه سورة ${s.name} كاملة`, date: today() }, k.name || '', k.gender); },
 });

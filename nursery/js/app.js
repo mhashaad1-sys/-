@@ -97,7 +97,7 @@ async function remove(store, id) {
 }
 function famHook(store, obj) {
   if (store === 'children') queueFamily(obj.id);
-  else if (['attendance', 'payments', 'notes', 'reports'].includes(store)) queueFamily(obj.childId);
+  else if (['attendance', 'payments', 'notes', 'reports', 'evals', 'awards'].includes(store)) queueFamily(obj.childId);
 }
 
 // الصلاحيات: finance (الفلوس)، staff (العاملين)، editChildren، manage (الإعدادات والمستخدمين)
@@ -319,6 +319,7 @@ function viewChildProfile({ id }) {
       <div class="btn-row" style="margin-top:12px">
         ${can('finance') ? `<button class="btn primary small" data-action="addPayment" data-child="${c.id}">💵 تحصيل</button>` : ''}
         <button class="btn small" data-action="addNote" data-child="${c.id}">📝 ملاحظة</button>
+        <button class="btn small" data-action="awardNew" data-id="${c.id}">🏆 شهادة</button>
         ${c.phone ? `<a class="btn small green" href="tel:${esc(c.phone)}">📞 اتصال</a>
         <a class="btn small green" target="_blank" href="${waLink(c.phone, `السلام عليكم ولي أمر ${c.name}، `)}">💬 واتساب</a>` : ''}
         ${c.phone && (bal || s.remaining) && can('finance') ? `<a class="btn small danger" target="_blank" href="${waLink(c.phone, reminder)}">🔔 تذكير بالمصاريف</a>` : ''}
@@ -326,6 +327,7 @@ function viewChildProfile({ id }) {
       </div>
     </div>
     ${parentSection(c)}
+    ${evalOf(thisMonth(), c.id) || evalOf(addMonths(thisMonth(), -1), c.id) ? `<div class="card">${evalCardHTML(evalOf(thisMonth(), c.id) || evalOf(addMonths(thisMonth(), -1), c.id), c.name)}</div>` : ''}
 
     <div class="card"><h3>البيانات</h3><dl class="kv">
       ${kv('تاريخ الميلاد', c.birthDate ? dateLabel(c.birthDate) : '')}
@@ -454,7 +456,7 @@ function viewFinance() {
     <button class="${t === 'payments' ? 'active' : ''}" data-action="finTab" data-t="payments">المقبوضات</button>
     <button class="${t === 'expenses' ? 'active' : ''}" data-action="finTab" data-t="expenses">المصروفات</button>
     <button class="${t === 'dues' ? 'active' : ''}" data-action="finTab" data-t="dues">المستحقات</button>
-  </div>${body}`;
+  </div><div class="btn-row" style="margin-bottom:8px"><button class="btn small" data-action="goCash">🧮 ملخص خزنة النهارده</button></div>${body}`;
 }
 
 // ================== العاملين ==================
@@ -842,6 +844,9 @@ function accountCard() {
 function viewMore() {
   const items = [
     ['📋', 'التقرير اليومي', 'أكل، نوم، مزاج، نشاط — بيوصل لولي الأمر', 'goDaily'],
+    ['📊', 'التقييم الشهري', 'تقييم كل طفل بالنجوم + كلمة المعلمة', 'goEvals'],
+    ['🏆', 'الشهادات ونجم الأسبوع', 'شهادات تقدير بتوصل لولي الأمر صورة', 'goAwards'],
+    ['🧮', 'ملخص الخزنة اليومي', 'مقبوضات اليوم بطريقة الدفع والمصروفات', 'goCash'],
     ['📚', 'منصة التمارين', 'التمارين والاشتراكات ومتابعة الأطفال', 'goHomework'],
     ['📅', 'الجدول الأسبوعي', 'جدول اليوم والأسبوع + مقترحات جاهزة', 'goSchedule'],
     ['📌', 'الالتزامات الشهرية', 'الإيجار والمرتبات والمرافق + تنبيهات', 'goObligations'],
@@ -861,7 +866,7 @@ function viewMore() {
   ];
   const allowed = {
     goReports: can('finance'), goImport: can('manage'), exportExcel: can('finance'), goSettings: can('manage'),
-    exportData: can('manage'), importData: can('manage'), goRequests: !!Cloud.role, goAnn: !!Cloud.role, goHomework: !!Cloud.role, goObligations: can('manage') || can('finance'), bulkParents: !!Cloud.role && can('manage'), goClasses: can('manage') || Cloud.role === 'teacher' || Cloud.role === 'accountant',
+    exportData: can('manage'), importData: can('manage'), goRequests: !!Cloud.role, goAnn: !!Cloud.role, goCash: can('finance'), goHomework: !!Cloud.role, goObligations: can('manage') || can('finance'), bulkParents: !!Cloud.role && can('manage'), goClasses: can('manage') || Cloud.role === 'teacher' || Cloud.role === 'accountant',
   };
   const shown = items.filter(([, , , a]) => allowed[a] !== false);
   return `${accountCard()}<div class="list menu-list">${shown.map(([ico, t, s, a]) => `<div class="item clickable" data-action="${a}"><div class="ico">${ico}</div><div class="main"><div class="title">${t}</div><div class="sub">${s}</div></div><span>‹</span></div>`).join('')}</div>
@@ -936,6 +941,7 @@ function viewReports() {
       <div class="chart">${series.map((s) => `<div class="col"><div class="pair"><div style="height:${s.inc / max * 100}%;background:var(--green)" title="${money(s.inc)}"></div><div style="height:${s.exp / max * 100}%;background:var(--red)" title="${money(s.exp)}"></div></div><div class="lbl">${shortMonth(s.m)}</div></div>`).join('')}</div>
       <div class="legend"><span><i style="background:var(--green)"></i>إيرادات</span><span><i style="background:var(--red)"></i>مصروفات</span></div>
     </div>
+    ${referralsCard()}
     <div class="card"><h3>الإيرادات حسب النوع</h3>${bars(r.byType, 'green')}</div>
     <div class="card"><h3>المصروفات حسب البند</h3>${bars(r.byCat, 'red')}</div>
     <div class="btn-row"><button class="btn primary" data-action="printReport">🖨️ طباعة تقرير ${monthLabel(m)}</button><button class="btn" data-action="exportExcel">📤 تصدير إكسيل</button></div>`,
@@ -976,6 +982,7 @@ function viewSettings() {
       <label class="full">طرق دفع تانية (تظهر لأولياء الأمور)<textarea id="sPayInfo" rows="2" placeholder="مثال: فودافون كاش 010xxxxxxx · إنستاباي ...">${esc(s.payInfo || '')}</textarea></label>
       <div class="actions"><button class="btn primary" data-action="saveSettings">حفظ</button></div>
     </div></div>
+    <div class="card"><h3>🔔 الإشعارات</h3><button class="btn" data-action="testNotify">جرّب إشعار على الموبايل ده</button></div>
     <div class="card"><h3>البيانات</h3>
       <div class="btn-row"><button class="btn" data-action="exportData">⬇️ تصدير نسخة احتياطية</button><button class="btn" data-action="importData">⬆️ استيراد</button>
       <button class="btn" data-action="exportExcel">📤 تصدير إكسيل</button>
@@ -1073,7 +1080,7 @@ function renderGate() {
 }
 
 const TABS = { home: viewHome, children: viewChildren, attendance: viewAttendance, finance: viewFinance, staff: viewStaffTab, more: viewMore };
-const VIEWS = { child: viewChildProfile, staffProfile: viewStaffProfile, classes: viewClasses, assign: viewAssign, reports: viewReports, settings: viewSettings, notes: viewNotes, schedule: viewSchedule, themes: viewThemes, messages: viewMessages, import: viewImport, about: viewAbout, members: viewMembers, requests: viewRequests, announcements: viewAnnouncements, bulkParents: viewBulkParents, daily: viewDaily, homework: viewHomework, obligations: viewObligations, plans: viewPlans };
+const VIEWS = { child: viewChildProfile, staffProfile: viewStaffProfile, classes: viewClasses, assign: viewAssign, reports: viewReports, settings: viewSettings, notes: viewNotes, schedule: viewSchedule, themes: viewThemes, messages: viewMessages, import: viewImport, about: viewAbout, members: viewMembers, requests: viewRequests, announcements: viewAnnouncements, bulkParents: viewBulkParents, daily: viewDaily, homework: viewHomework, obligations: viewObligations, plans: viewPlans, evals: viewEvals, awards: viewAwards, cashday: viewCashDay };
 
 // ================== النماذج ==================
 function openModal(title, html) { $('#modalTitle').textContent = title; $('#modalBody').innerHTML = html; $('#modal').classList.remove('hidden'); }
@@ -1164,6 +1171,7 @@ function childForm(c) {
       { name: 'medical', label: 'ملاحظات صحية / حساسية / أدوية', type: 'textarea', full: true },
       { name: 'pickup', label: 'الأشخاص المسموح لهم باستلام الطفل', type: 'textarea', full: true },
       { name: 'notes', label: 'ملاحظات أخرى', type: 'textarea', full: true },
+      { name: 'referredBy', label: '🎁 جاي بترشيح من ولي أمر (اختياري)', type: 'select', options: [['', '—'], ...activeChildren().filter((x) => x.id !== c.id).map((x) => [x.id, x.name])], full: true },
       ...(isNew ? [] : [{ name: 'active', label: 'مسجل حاليًا في الحضانة', type: 'checkbox', full: true }, { name: 'leaveDate', label: 'تاريخ الترك (لو ترك)', type: 'date', full: true }]),
     ],
     onSave: async (v) => {
@@ -1651,6 +1659,11 @@ document.addEventListener('input', (e) => {
     const pos = e.target.selectionStart; render();
     const s = $('#childSearch'); s.focus(); s.setSelectionRange(pos, pos);
   } else if (id === 'msgText') state.msgText = e.target.value;
+  else if (id === 'cashCount') {
+    const d = state.cashDate || today(), cash = sum(D.payments.filter((p) => p.date === d && (p.method || 'نقدي') === 'نقدي'), (p) => p.amount) - sum(D.expenses.filter((x) => x.date === d), (x) => x.amount);
+    const diff = (Number(e.target.value) || 0) - cash;
+    $('#cashDiff').innerHTML = e.target.value === '' ? '' : diff === 0 ? '<b style="color:var(--green)">✅ الخزنة مظبوطة</b>' : `<b style="color:var(--red)">${diff > 0 ? 'زيادة' : 'عجز'} ${money(Math.abs(diff))}</b>`;
+  }
 });
 document.addEventListener('change', async (e) => {
   const t = e.target, id = t.id;
@@ -1660,6 +1673,8 @@ document.addEventListener('change', async (e) => {
   else if (id === 'attClass') { state.attClass = t.value; render(); }
   else if (id === 'staffAttDate') { state.staffAttDate = t.value || today(); render(); }
   else if (t.name === 'subMode') { await saveSettings({ subMode: t.value }); toast(t.value === 'app' ? 'الاشتراك بقى للتطبيق كله ✅' : 'الاشتراك بقى للتمارين والمنهج ✅'); render(); }
+  else if (id === 'evalClass') { state.evalClass = t.value; render(); }
+  else if (id === 'cashDate') { state.cashDate = t.value || today(); render(); }
   else if (id === 'repDate') { state.repDate = t.value || today(); render(); }
   else if (id === 'repClass') { state.repClass = t.value; render(); }
   else if (t.dataset.rep) { const d = state.repDate, cid = t.dataset.rep, old = repOf(d, cid) || { id: `${d}_${cid}`, date: d, childId: cid }; await save('reports', { ...old, [t.dataset.f]: t.value.trim() }); }
