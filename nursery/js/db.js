@@ -1,7 +1,9 @@
 // طبقة التخزين المحلي (IndexedDB) - كل البيانات على الجهاز فقط
 const DB_NAME = 'nursery-db';
-const DB_VERSION = 5;
-const STORES = ['settings', 'classes', 'children', 'attendance', 'payments', 'expenses', 'staff', 'notes', 'staffAtt', 'staffTx', 'schedule', 'requests', 'announcements', 'reports', 'homework', 'hwProg', 'evals', 'awards'];
+const DB_VERSION = 6;
+const STORES = ['settings', 'classes', 'children', 'attendance', 'payments', 'expenses', 'staff', 'notes', 'staffAtt', 'staffTx', 'schedule', 'requests', 'announcements', 'reports', 'homework', 'hwProg', 'evals', 'awards', 'moments'];
+// صور لحظات اليوم في مخزن منفصل (مش بتتحمّل كلها في الذاكرة)
+const EXTRA_STORES = ['momentPics'];
 
 let _db = null;
 
@@ -11,7 +13,7 @@ function openDB() {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
       const db = req.result;
-      STORES.forEach((s) => {
+      [...STORES, ...EXTRA_STORES].forEach((s) => {
         if (!db.objectStoreNames.contains(s)) db.createObjectStore(s, { keyPath: 'id' });
       });
     };
@@ -33,6 +35,7 @@ function tx(store, mode, fn) {
 
 const DB = {
   STORES,
+  get: (store, id) => tx(store, 'readonly', (s) => s.get(id)),
   getAll: (store) => tx(store, 'readonly', (s) => s.getAll()),
   put: (store, obj) => tx(store, 'readwrite', (s) => s.put(obj)),
   del: (store, id) => tx(store, 'readwrite', (s) => s.delete(id)),

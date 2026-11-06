@@ -14,8 +14,8 @@ const FIREBASE_CONFIG = {
 const ORG_ID = 'baraem';
 
 const ROLES = { owner: 'صاحبة الحضانة', admin: 'مدير/ة', accountant: 'محاسب/ة', teacher: 'معلمة / مشرفة', parent: 'ولي أمر' };
-const ALL_STORES = ['settings', 'classes', 'children', 'attendance', 'payments', 'expenses', 'staff', 'notes', 'staffAtt', 'staffTx', 'schedule', 'requests', 'announcements', 'reports', 'homework', 'hwProg', 'evals', 'awards'];
-const BASIC_STORES = ['settings', 'classes', 'children', 'attendance', 'notes', 'schedule', 'requests', 'announcements', 'reports', 'homework', 'hwProg', 'evals', 'awards'];
+const ALL_STORES = ['settings', 'classes', 'children', 'attendance', 'payments', 'expenses', 'staff', 'notes', 'staffAtt', 'staffTx', 'schedule', 'requests', 'announcements', 'reports', 'homework', 'hwProg', 'evals', 'awards', 'moments'];
+const BASIC_STORES = ['settings', 'classes', 'children', 'attendance', 'notes', 'schedule', 'requests', 'announcements', 'reports', 'homework', 'hwProg', 'evals', 'awards', 'moments'];
 const CLOUD_READ = {
   admin: ALL_STORES,
   accountant: [...BASIC_STORES, 'payments', 'expenses', 'staff', 'staffTx', 'staffAtt'],
@@ -24,8 +24,8 @@ const CLOUD_READ = {
 };
 const CLOUD_WRITE = {
   admin: ALL_STORES,
-  accountant: ['attendance', 'notes', 'schedule', 'requests', 'reports', 'evals', 'awards', 'children', 'payments', 'expenses', 'staff', 'staffTx'],
-  teacher: ['attendance', 'notes', 'schedule', 'requests', 'reports', 'evals', 'awards'],
+  accountant: ['attendance', 'notes', 'schedule', 'requests', 'reports', 'evals', 'awards', 'moments', 'children', 'payments', 'expenses', 'staff', 'staffTx'],
+  teacher: ['attendance', 'notes', 'schedule', 'requests', 'reports', 'evals', 'awards', 'moments'],
   parent: [],
 };
 // حسابات أولياء الأمور بتتعمل برقم الموبايل (بيتحول لإيميل داخلي)
@@ -45,7 +45,7 @@ const clean = (o) => JSON.parse(JSON.stringify(o));
 
 const Cloud = {
   ready: false, user: null, role: null, email: '', name: '', status: 'local', error: '',
-  childIds: [], fam: {}, req: {}, hwProg: {}, loaded: {},
+  childIds: [], fam: {}, mom: {}, momSeen: null, req: {}, hwProg: {}, loaded: {},
   unsubs: [], pending: false, queue: Promise.resolve(), onChange: () => {},
 
   init(onChange) {
@@ -283,6 +283,14 @@ const Cloud = {
     this.track(this.col('family').doc(cid).set(payload, { mergeFields: Object.keys(payload) }));
   },
 
+  // ---------- صور لحظات اليوم ----------
+  setPics(id, data) {
+    if (!this.role || this.role === 'parent') return;
+    this.track(this.col('momentPics').doc(id).set(clean(data)));
+  },
+  delPics(id) { if (this.role && this.role !== 'parent') this.col('momentPics').doc(id).delete().catch(() => {}); },
+  async getPics(id) { const d = await this.col('momentPics').doc(id).get(); return d.exists ? d.data() : null; },
+
   // ---------- تطبيق ولي الأمر ----------
   startParent() {
     this.status = navigator.onLine ? 'synced' : 'offline';
@@ -298,6 +306,15 @@ const Cloud = {
         const old = this.req[cid];
         this.req[cid] = q.docs.map((x) => x.data());
         if (old && typeof parentNotify === 'function') parentNotify('requests', cid, old, this.req[cid]);
+        this.onChange('data');
+      }, onErr));
+    }
+    // لحظات اليوم: كل لحظة فيها قائمة الأطفال اللي تخصهم (kids)
+    this.momSeen = null;
+    for (const cid of this.childIds) {
+      this.unsubs.push(this.col('moments').where('kids', 'array-contains', cid).onSnapshot((q) => {
+        this.mom[cid] = q.docs.map((x) => ({ ...x.data(), id: x.id })).filter((x) => !x.deleted);
+        if (typeof momentsNotify === 'function') momentsNotify(cid, this.mom[cid]);
         this.onChange('data');
       }, onErr));
     }

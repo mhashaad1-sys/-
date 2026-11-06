@@ -3,16 +3,15 @@
 // ---------- التقرير اليومي ----------
 const REPORT_FIELDS = {
   breakfast: { label: 'الفطار', icon: '🥪', opts: [['all', 'كله'], ['half', 'نصه'], ['little', 'شوية'], ['none', 'ما أكلش']] },
-  lunch: { label: 'الغدا', icon: '🍲', opts: [['all', 'كله'], ['half', 'نصه'], ['little', 'شوية'], ['none', 'ما أكلش']] },
   nap: { label: 'النوم', icon: '😴', opts: [['none', 'ما نامش'], ['30', 'نص ساعة'], ['60', 'ساعة'], ['90', 'ساعة ونص'], ['120', 'ساعتين']] },
   mood: { label: 'المزاج', icon: '🙂', opts: [['happy', '😄 مبسوط'], ['calm', '🙂 هادي'], ['sad', '😢 زعلان'], ['tired', '😪 تعبان'], ['sick', '🤒 عيان']] },
-  toilet: { label: 'الحمام', icon: '🚽', opts: [['ok', 'طبيعي'], ['diaper', 'غيرنا البامبرز'], ['accident', 'حصلت حادثة']] },
+  toilet: { label: 'الحمام', icon: '🚽', opts: [['ok', 'طبيعي'], ['diaper', 'غيرنا البامبرز']] },
 };
 const repOf = (date, cid) => D.reports.find((r) => r.id === `${date}_${cid}`);
 const optLabel = (f, v) => ((REPORT_FIELDS[f].opts.find((o) => o[0] === v) || [])[1] || '');
 function reportText(rep, name) {
   if (!rep) return '';
-  const lines = Object.keys(REPORT_FIELDS).filter((f) => rep[f]).map((f) => `${REPORT_FIELDS[f].icon} ${REPORT_FIELDS[f].label}: ${optLabel(f, rep[f])}`);
+  const lines = Object.keys(REPORT_FIELDS).filter((f) => rep[f] && optLabel(f, rep[f])).map((f) => `${REPORT_FIELDS[f].icon} ${REPORT_FIELDS[f].label}: ${optLabel(f, rep[f])}`);
   if (rep.activity) lines.push(`🎨 النشاط: ${rep.activity}`);
   if (rep.note) lines.push(`📝 ${rep.note}`);
   return `📋 تقرير ${name || ''} - ${dateLabel(rep.date)}\n${lines.join('\n')}`;
@@ -47,7 +46,7 @@ function viewDaily() {
 function repTemplateForm() {
   openForm({
     title: '⚡ نفس التقرير لكل الأطفال اللي لسه ماتسجلش لهم',
-    data: { breakfast: 'all', lunch: 'all', nap: '60', mood: 'happy', toilet: 'ok' },
+    data: { breakfast: 'all', nap: '60', mood: 'happy', toilet: 'ok' },
     fields: [
       ...Object.entries(REPORT_FIELDS).map(([f, def]) => ({ name: f, label: `${def.icon} ${def.label}`, type: 'select', options: [['', '—'], ...def.opts] })),
       { name: 'activity', label: '🎨 نشاط اليوم', full: true, list: ACTIVITY_BANK },

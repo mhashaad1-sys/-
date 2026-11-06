@@ -354,3 +354,28 @@ details summary { cursor: pointer; }
 .cert-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; }
 .cert-chip { border: 0; background: #fff; border-radius: 16px; padding: 10px 6px; box-shadow: 0 3px 0 #ffd54f; display: flex; flex-direction: column; align-items: center; gap: 2px; font-family: inherit; }
 .cert-chip span { font-size: 32px; } .cert-chip b { font-size: 13px; } .cert-chip small { font-size: 11px; color: var(--muted); }
+
+/* الجروبات + لحظات اليوم + العاجل */
+.quick { grid-template-columns: repeat(auto-fit, minmax(62px, 1fr)); }
+.cls-chip { border: 1px solid #d9c6ef; background: #f6f0fb; color: #5b3a8a; border-radius: 14px; padding: 3px 10px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.cls-chip.none { background: #fff; color: var(--muted); border-style: dashed; }
+.group-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.group-pick .btn { padding: 14px; font-size: 16px; }
+.time-chip { border: 0; background: #eef7ee; color: #2e7d32; border-radius: 10px; padding: 2px 8px; font-size: 12px; font-family: inherit; }
+.urgent-btn { background: #ffebee !important; color: #c62828 !important; }
+.urgent-actions { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.urgent-card { border: 2px solid #e53935; background: #fff5f5; }
+.moment .mo-ico { font-size: 28px; margin-left: 8px; }
+.mo-pics { display: grid; gap: 4px; margin-top: 8px; grid-template-columns: 1fr 1fr; }
+.mo-pics.n1 { grid-template-columns: 1fr; }
+.mo-pics img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; background: #f3eef8; cursor: pointer; }
+.mo-pics.n1 img { aspect-ratio: 4 / 3; }
+.mo-pics img.loading { animation: pulse 1.2s infinite; }
+.mo-pics img.missing { opacity: .3; }
+@keyframes pulse { 50% { opacity: .5; } }
+.mo-thumbs { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.mo-thumbs .th { position: relative; width: 70px; height: 70px; border-radius: 10px; overflow: hidden; }
+.mo-thumbs .th img { width: 100%; height: 100%; object-fit: cover; }
+.mo-thumbs .th button { position: absolute; top: 2px; left: 2px; border: 0; background: #0008; color: #fff; border-radius: 50%; width: 22px; height: 22px; font-size: 12px; }
+.mo-thumbs .th.add { border: 2px dashed #d9c6ef; background: #fbf8fe; color: #5b3a8a; font-size: 12px; font-family: inherit; }
+.composer .lbl { font-weight: 700; font-size: 13px; }

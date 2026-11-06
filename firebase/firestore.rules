@@ -21,13 +21,13 @@ service cloud.firestore {
 
     function canRead(c) {
       return isAdmin()
-        || ((isAccountant() || isTeacher()) && c in ['settings', 'classes', 'children', 'attDays', 'notes', 'schedule', 'requests', 'announcements', 'repDays', 'homework', 'hwProg', 'evals', 'awards'])
+        || ((isAccountant() || isTeacher()) && c in ['settings', 'classes', 'children', 'attDays', 'notes', 'schedule', 'requests', 'announcements', 'repDays', 'homework', 'hwProg', 'evals', 'awards', 'moments', 'momentPics'])
         || (isAccountant() && c in ['payments', 'expenses', 'staff', 'staffTx', 'staffAttDays'])
         || (isParent() && c in ['settings', 'schedule', 'announcements', 'homework']);
     }
     function canWrite(c) {
       return isAdmin()
-        || ((isAccountant() || isTeacher()) && c in ['attDays', 'notes', 'schedule', 'requests', 'repDays', 'evals', 'awards'])
+        || ((isAccountant() || isTeacher()) && c in ['attDays', 'notes', 'schedule', 'requests', 'repDays', 'evals', 'awards', 'moments', 'momentPics'])
         || (isAccountant() && c in ['children', 'payments', 'expenses', 'staff', 'staffTx']);
     }
 
@@ -44,6 +44,13 @@ service cloud.firestore {
     match /org/baraem/family/{cid} {
       allow read: if isStaff() || (isParent() && cid in myKids() && appOk());
       allow write: if isStaff();
+    }
+
+    match /org/baraem/moments/{id} {
+      allow read: if isParent() && resource.data.kids.hasAny(myKids()) && appOk();
+    }
+    match /org/baraem/momentPics/{id} {
+      allow read: if isParent() && resource.data.kids.hasAny(myKids()) && appOk();
     }
 
     match /org/baraem/requests/{rid} {

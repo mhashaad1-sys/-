@@ -25,6 +25,7 @@ const state = {
 function pad(n) { return String(n).padStart(2, '0'); }
 function today() { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
 function thisMonth() { return today().slice(0, 7); }
+function timeLabel(t) { if (!t) return ''; const [h, m] = t.split(':').map(Number); return `${num(h % 12 || 12)}:${String(m).padStart(2, '0').replace(/\d/g, (d) => '٠١٢٣٤٥٦٧٨٩'[d])} ${h < 12 ? 'ص' : 'م'}`; }
 function nowTime() { const d = new Date(); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
@@ -117,11 +118,11 @@ async function saveSettings(patch) { await save('settings', { ...settings(), ...
 const child = (id) => D.children.find((c) => c.id === id);
 const cls = (id) => D.classes.find((c) => c.id === id);
 const staffById = (id) => D.staff.find((s) => s.id === id);
-const className = (id) => (cls(id) || {}).name || 'بدون فصل';
+const className = (id) => (cls(id) || {}).name || 'بدون جروب';
 const byName = (a, b) => a.name.localeCompare(b.name, 'ar');
 const activeChildren = () => D.children.filter((c) => c.active !== false).sort(byName);
 const activeStaff = () => D.staff.filter((s) => s.active !== false).sort(byName);
-const classOpts = (sel, all = 'كل الفصول') => `<option value="">${all}</option>${D.classes.map((k) => `<option value="${k.id}" ${sel === k.id ? 'selected' : ''}>${esc(k.name)}</option>`).join('')}`;
+const classOpts = (sel, all = 'كل الجروبات') => `<option value="">${all}</option>${D.classes.map((k) => `<option value="${k.id}" ${sel === k.id ? 'selected' : ''}>${esc(k.name)}</option>`).join('')}`;
 
 function monthPaid(c, m) { return sum(D.payments.filter((p) => p.childId === c.id && p.type === 'monthly' && p.month === m), (p) => p.amount); }
 function monthStatus(c, m) {
@@ -192,6 +193,7 @@ function render() {
   else html = (parent ? PARENT_VIEWS : TABS)[state.tab]();
   $('#pageTitle').textContent = title;
   $('#view').innerHTML = html;
+  hydratePics();
   syncReminders();
 }
 
@@ -230,6 +232,7 @@ function viewHome() {
     ${can('finance') ? `<button data-action="addPayment"><span>💵</span>تحصيل</button>
     <button data-action="addExpense"><span>🧾</span>مصروف</button>` : `<button data-action="addNote"><span>📝</span>ملاحظة</button>
     <button data-action="goDaily"><span>📋</span>التقرير</button>`}
+    <button data-action="goMoments"><span>📸</span>لحظات</button>
     <button data-action="goMessages"><span>💬</span>رسائل</button>
   </div>
   <div class="stats">
@@ -293,7 +296,8 @@ function viewChildren() {
     <select id="childStatus"><option value="active" ${state.childStatus === 'active' ? 'selected' : ''}>المسجلين حاليًا</option><option value="left" ${state.childStatus === 'left' ? 'selected' : ''}>تركوا الحضانة</option></select>
     ${can('editChildren') ? '<button class="btn primary" data-action="addChild">+ طفل</button>' : ''}
   </div>
-  <div class="list" id="childList">${list.map((c) => { const s = monthStatus(c, m); return childRow(c, c.active === false ? '<span class="badge gray">غير مسجل</span>' : can('finance') ? `<span class="badge ${s.cls}">${s.label}</span>` : ''); }).join('') || '<div class="empty">لا يوجد أطفال</div>'}</div>
+  ${can('editChildren') && D.classes.length ? `<button class="btn small block" style="margin-bottom:8px" data-action="assignClasses">👥 توزيع الأطفال على الجروبات (${num(activeChildren().filter((c) => !c.classId).length)} من غير جروب)</button>` : ''}
+  <div class="list" id="childList">${list.map((c) => { const s = monthStatus(c, m); return childRow(c, `${c.active === false ? '' : groupChip(c)}${c.active === false ? '<span class="badge gray">غير مسجل</span>' : can('finance') ? `<span class="badge ${s.cls}">${s.label}</span>` : ''}`); }).join('') || '<div class="empty">لا يوجد أطفال</div>'}</div>
   <p class="sub" style="text-align:center;color:var(--muted);font-size:12px">العدد: ${num(list.length)}${can('manage') ? ' · <a href="#" data-action="goImport">استيراد من إكسيل</a>' : ''}</p>`;
 }
 
@@ -318,6 +322,7 @@ function viewChildProfile({ id }) {
       ${!c.phone && can('editChildren') ? `<div class="alert">📞 مفيش رقم تليفون لولي الأمر — اضغط تعديل وضيفه عشان تقدر تبعت رسايل واتساب.</div>` : ''}
       <div class="btn-row" style="margin-top:12px">
         ${can('finance') ? `<button class="btn primary small" data-action="addPayment" data-child="${c.id}">💵 تحصيل</button>` : ''}
+        <button class="btn small urgent-btn" data-action="urgent" data-id="${c.id}">🚨 اتصال عاجل</button>
         <button class="btn small" data-action="addNote" data-child="${c.id}">📝 ملاحظة</button>
         <button class="btn small" data-action="awardNew" data-id="${c.id}">🏆 شهادة</button>
         ${c.phone ? `<a class="btn small green" href="tel:${esc(c.phone)}">📞 اتصال</a>
@@ -376,18 +381,20 @@ function viewAttendance() {
     <span class="badge red">غائب ${num(counts.absent)}</span><span class="badge gray">لم يُسجَّل ${num(counts.none)}</span></div>
     <div class="btn-row" style="margin-top:10px"><button class="btn small green" data-action="allPresent">✔ الكل حاضر</button>
     <button class="btn small" data-action="shareAttendance">📤 مشاركة كشف اليوم</button>
-    <button class="btn small primary" data-action="goDaily">📋 التقرير اليومي</button></div>
+    <button class="btn small primary" data-action="goDaily">📋 التقرير اليومي</button>
+    <button class="btn small primary" data-action="goMoments">📸 لحظة للجروب</button></div>
   </div>
   <div class="list">${kids.map((c) => {
     const a = attOf(d, c.id), st = a ? a.status : '';
     return `<div class="item">${avatar(c)}
       <div class="main"><div class="title">${esc(c.name)}${activeMeds(c.id, d).length ? ' 💊' : ''}${dayRequests(c.id, d).length ? ' 🧍' : ''}</div>
-      <div class="sub">${a && a.checkIn ? `دخول ${a.checkIn}` : esc(className(c.classId))}${a && a.checkOut ? ` · خروج ${a.checkOut}` : ''}${a && a.excuse ? ` · بإذن: ${esc(a.excuse)}` : ''}</div>
+      <div class="sub">${a && a.status !== 'absent' ? `<button class="time-chip" data-action="editAttTime" data-id="${c.id}">🕒 ${a.checkIn ? 'دخول ' + timeLabel(a.checkIn) : 'سجّل وقت الدخول'}${a.checkOut ? ' · خروج ' + timeLabel(a.checkOut) : ''} ✏️</button>` : esc(className(c.classId))}${a && a.excuse ? ` · بإذن: ${esc(a.excuse)}` : ''}</div>
       ${activeMeds(c.id, d).map((r) => `<div class="sub" style="color:var(--primary-dark)">💊 ${esc(r.medName)} ${esc(r.dose || '')} ${esc(r.time || '')}</div>`).join('')}
       ${dayRequests(c.id, d).map((r) => `<div class="sub" style="color:var(--purple)">${REQUEST_TYPES[r.type].icon} ${esc(r.type === 'pickup' ? 'هيستلمه: ' + r.person : 'خروج بدري ' + (r.time || ''))}</div>`).join('')}</div>
       <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
       ${attToggle(st, c.id, 'mark', ['present', 'late', 'absent'])}
       ${a && a.status !== 'absent' && !a.checkOut ? `<button class="btn small" data-action="checkout" data-id="${c.id}">🚪 تسجيل خروج</button>` : ''}
+      <button class="btn small urgent-btn" data-action="urgent" data-id="${c.id}" title="اتصال عاجل بولي الأمر">🚨 عاجل</button>
       </div></div>`;
   }).join('') || '<div class="empty">لا يوجد أطفال مسجلين</div>'}</div>`;
 }
@@ -583,7 +590,7 @@ function viewSchedule() {
   return {
     title: 'الجدول الأسبوعي',
     html: `
-    <div class="toolbar"><select id="schedClass"><option value="general" ${state.schedClass === 'general' ? 'selected' : ''}>الجدول العام (كل الفصول)</option>
+    <div class="toolbar"><select id="schedClass"><option value="general" ${state.schedClass === 'general' ? 'selected' : ''}>الجدول العام (كل الجروبات)</option>
       ${D.classes.map((k) => `<option value="${k.id}" ${state.schedClass === k.id ? 'selected' : ''}>${esc(k.name)}</option>`).join('')}</select></div>
     <div class="card">
       <div class="section-title" style="margin:0 0 6px"><h3>🌱 موضوع الأسبوع</h3><button class="btn small" data-action="goThemes">💡 مقترحات</button></div>
@@ -843,14 +850,15 @@ function accountCard() {
 
 function viewMore() {
   const items = [
-    ['📋', 'التقرير اليومي', 'أكل، نوم، مزاج، نشاط — بيوصل لولي الأمر', 'goDaily'],
+    ['📸', 'لحظات اليوم', 'الجروب بيعمل إيه دلوقتي + صور — بتوصل للأهالي', 'goMoments'],
+    ['📋', 'التقرير اليومي', 'فطار، نوم، مزاج، نشاط — بيوصل لولي الأمر', 'goDaily'],
     ['📊', 'التقييم الشهري', 'تقييم كل طفل بالنجوم + كلمة المعلمة', 'goEvals'],
     ['🏆', 'الشهادات ونجم الأسبوع', 'شهادات تقدير بتوصل لولي الأمر صورة', 'goAwards'],
     ['🧮', 'ملخص الخزنة اليومي', 'مقبوضات اليوم بطريقة الدفع والمصروفات', 'goCash'],
     ['📚', 'منصة التمارين', 'التمارين والاشتراكات ومتابعة الأطفال', 'goHomework'],
     ['📅', 'الجدول الأسبوعي', 'جدول اليوم والأسبوع + مقترحات جاهزة', 'goSchedule'],
     ['📌', 'الالتزامات الشهرية', 'الإيجار والمرتبات والمرافق + تنبيهات', 'goObligations'],
-    ['🏫', 'الفصول / المجموعات', `${num(D.classes.length)} فصل`, 'goClasses'],
+    ['🏫', 'الجروبات (الفصول)', `${num(D.classes.length)} جروب`, 'goClasses'],
     ['📨', 'طلبات أولياء الأمور', `${num(pendingRequests().length)} طلب جديد`, 'goRequests'],
     ['📢', 'إعلانات لأولياء الأمور', 'تظهر في تطبيق الأهالي مع إشعار', 'goAnn'],
     ['👨‍👩‍👧', 'حسابات أولياء الأمور', 'عمل حسابات لكل الأهالي مرة واحدة', 'bulkParents'],
@@ -890,10 +898,11 @@ function viewClasses() {
 function viewAssign() {
   const kids = activeChildren();
   return {
-    title: 'توزيع الأطفال على الفصول',
-    html: `<p class="sub" style="color:var(--muted)">اختار فصل كل طفل، والحفظ تلقائي.</p>
-    <div class="list">${kids.map((c) => `<div class="item">${avatar(c)}<div class="main"><div class="title">${esc(c.name)}</div></div>
-      <select data-assign="${c.id}" style="width:auto;min-width:120px">${classOpts(c.classId, 'بدون فصل')}</select></div>`).join('')}</div>`,
+    title: 'توزيع الأطفال على الجروبات',
+    html: `<p class="sub" style="color:var(--muted)">اضغطي على جروب كل طفل، والحفظ تلقائي. الأطفال اللي من غير جروب فوق.</p>
+    <div class="stats">${D.classes.map((k) => `<div class="stat purple"><div class="label">${esc(k.name)}</div><div class="value">${num(kids.filter((c) => c.classId === k.id).length)}</div></div>`).join('')}</div>
+    <div class="list">${[...kids].sort((a, b) => (a.classId ? 1 : 0) - (b.classId ? 1 : 0)).map((c) => `<div class="item">${avatar(c)}<div class="main"><div class="title">${esc(c.name)}</div>
+      <div class="chips" style="margin-top:4px">${D.classes.map((k) => `<button class="chip ${c.classId === k.id ? 'on' : ''}" data-action="assignTo" data-id="${c.id}" data-cls="${k.id}">${esc(k.name)}</button>`).join('')}</div></div></div>`).join('')}</div>`,
   };
 }
 
@@ -1080,7 +1089,7 @@ function renderGate() {
 }
 
 const TABS = { home: viewHome, children: viewChildren, attendance: viewAttendance, finance: viewFinance, staff: viewStaffTab, more: viewMore };
-const VIEWS = { child: viewChildProfile, staffProfile: viewStaffProfile, classes: viewClasses, assign: viewAssign, reports: viewReports, settings: viewSettings, notes: viewNotes, schedule: viewSchedule, themes: viewThemes, messages: viewMessages, import: viewImport, about: viewAbout, members: viewMembers, requests: viewRequests, announcements: viewAnnouncements, bulkParents: viewBulkParents, daily: viewDaily, homework: viewHomework, obligations: viewObligations, plans: viewPlans, evals: viewEvals, awards: viewAwards, cashday: viewCashDay };
+const VIEWS = { child: viewChildProfile, staffProfile: viewStaffProfile, classes: viewClasses, assign: viewAssign, reports: viewReports, settings: viewSettings, notes: viewNotes, schedule: viewSchedule, themes: viewThemes, messages: viewMessages, import: viewImport, about: viewAbout, members: viewMembers, requests: viewRequests, announcements: viewAnnouncements, bulkParents: viewBulkParents, daily: viewDaily, homework: viewHomework, obligations: viewObligations, plans: viewPlans, evals: viewEvals, awards: viewAwards, cashday: viewCashDay, moments: (...a) => viewMoments(...a) };
 
 // ================== النماذج ==================
 function openModal(title, html) { $('#modalTitle').textContent = title; $('#modalBody').innerHTML = html; $('#modal').classList.remove('hidden'); }
@@ -1128,7 +1137,7 @@ function openForm({ title, fields, data = {}, onSave, onDelete, deleteLabel = '�
   if (pi) pi.addEventListener('change', () => resizeImage(pi.files[0]).then((url) => { form.elements.photo.value = url; $('#photoPreview').innerHTML = `<img src="${url}">`; }));
 }
 
-function resizeImage(file, max = 360) {
+function resizeImage(file, max = 360, q = 0.8) {
   return new Promise((resolve, reject) => {
     if (!file) return reject();
     const r = new FileReader();
@@ -1138,7 +1147,7 @@ function resizeImage(file, max = 360) {
         const k = Math.min(1, max / Math.max(img.width, img.height));
         const cv = document.createElement('canvas'); cv.width = img.width * k; cv.height = img.height * k;
         cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
-        resolve(cv.toDataURL('image/jpeg', 0.8));
+        resolve(cv.toDataURL('image/jpeg', q));
       };
       img.onerror = reject; img.src = r.result;
     };
@@ -1146,7 +1155,7 @@ function resizeImage(file, max = 360) {
   });
 }
 
-const classOptions = () => [['', 'بدون فصل'], ...D.classes.map((k) => [k.id, k.name])];
+const classOptions = () => [['', 'بدون جروب'], ...D.classes.map((k) => [k.id, k.name])];
 const childOptions = () => activeChildren().map((c) => [c.id, c.name]);
 
 function childForm(c) {
@@ -1170,6 +1179,7 @@ function childForm(c) {
       { name: 'address', label: 'العنوان', full: true },
       { name: 'medical', label: 'ملاحظات صحية / حساسية / أدوية', type: 'textarea', full: true },
       { name: 'pickup', label: 'الأشخاص المسموح لهم باستلام الطفل', type: 'textarea', full: true },
+      { name: 'photoOk', label: '📸 موافقة ولي الأمر على تصوير الطفل (لحظات اليوم)', type: 'select', options: [['', 'لسه ما اتسألش'], ['yes', '✅ موافق'], ['no', '🚫 رافض التصوير']], full: true },
       { name: 'notes', label: 'ملاحظات أخرى', type: 'textarea', full: true },
       { name: 'referredBy', label: '🎁 جاي بترشيح من ولي أمر (اختياري)', type: 'select', options: [['', '—'], ...activeChildren().filter((x) => x.id !== c.id).map((x) => [x.id, x.name])], full: true },
       ...(isNew ? [] : [{ name: 'active', label: 'مسجل حاليًا في الحضانة', type: 'checkbox', full: true }, { name: 'leaveDate', label: 'تاريخ الترك (لو ترك)', type: 'date', full: true }]),
@@ -1438,6 +1448,26 @@ async function staffMark(staffId, status) {
   await save('staffAtt', obj); render();
 }
 
+// تعديل وقت الدخول/الخروج (لو الطفل وصل قبل ما المديرة تسجّل)
+function attTimeForm(cid) {
+  const d = state.attDate, a = attOf(d, cid), c = child(cid);
+  if (!a) return;
+  openForm({
+    title: `🕒 مواعيد ${c ? c.name : ''} - ${dateLabel(d)}`,
+    intro: '<p class="sub" style="color:var(--muted)">لو الطفل وصل قبل ما تسجّلي، اكتبي الساعة اللي وصل فيها فعلًا. ولي الأمر هيشوف الوقت ده.</p>',
+    data: { checkIn: a.checkIn || '', checkOut: a.checkOut || '' },
+    fields: [
+      { name: 'checkIn', label: 'وقت الدخول', type: 'time' },
+      { name: 'checkOut', label: 'وقت الخروج', type: 'time' },
+    ],
+    onSave: async (v) => {
+      if (v.checkIn && v.checkOut && v.checkOut < v.checkIn) { toast('وقت الخروج قبل وقت الدخول'); return false; }
+      await save('attendance', { ...a, checkIn: v.checkIn, checkOut: v.checkOut });
+      toast('تم تعديل الوقت ✅');
+    },
+  });
+}
+
 const ACTIONS = {
   showLogin: () => { state.forceLogin = true; render(); },
   skipLogin: () => { LS.set('skipLogin', '1'); state.forceLogin = false; render(); },
@@ -1569,6 +1599,7 @@ const ACTIONS = {
       <tr><th colspan="6">الإجمالي</th><th>${num(sum(rows, (x) => x.r.net))}</th><th></th></tr></table></div>`);
   },
   mark: (el) => mark(el.dataset.id, el.dataset.st),
+  editAttTime: (el) => attTimeForm(el.dataset.id),
   checkout: async (el) => { const a = attOf(state.attDate, el.dataset.id); await save('attendance', { ...a, checkOut: nowTime() }); render(); },
   allPresent: async () => {
     let kids = activeChildren(); if (state.attClass) kids = kids.filter((c) => c.classId === state.attClass);
@@ -1600,7 +1631,7 @@ const ACTIONS = {
     history.back(); toast('تم اختيار موضوع الأسبوع ✅');
   },
   weekTable: () => { const sch = getSchedule(state.schedClass); openModal('جدول الأسبوع', `<div style="overflow-x:auto">${weekTableHTML(sch, state.schedClass === 'general' ? 'الجدول العام' : className(state.schedClass))}</div>`); },
-  printSchedule: () => { const sch = getSchedule(state.schedClass); printHTML(`<div class="report-print">${printHeader()}${weekTableHTML(sch, 'الجدول الأسبوعي - ' + (state.schedClass === 'general' ? 'كل الفصول' : className(state.schedClass)))}</div>`); },
+  printSchedule: () => { const sch = getSchedule(state.schedClass); printHTML(`<div class="report-print">${printHeader()}${weekTableHTML(sch, 'الجدول الأسبوعي - ' + (state.schedClass === 'general' ? 'كل الجروبات' : className(state.schedClass)))}</div>`); },
   shareSchedule: () => {
     const sch = getSchedule(state.schedClass), di = state.schedDay;
     shareText(`🌱 ${settings().name}\nجدول يوم ${DAYS[di]}${sch.theme ? `\nموضوع الأسبوع: ${sch.theme}` : ''}\n\n${sch.slots.filter((s) => s.cells[di]).map((s) => `⏰ ${s.time}: ${s.cells[di]}`).join('\n')}`);
@@ -1721,11 +1752,11 @@ async function firstRun() {
 
 (async function init() {
   await loadAll();
-  if (!LS.get('linked')) await firstRun();
+  if (!LS.get('linked')) { await firstRun(); await ensureGroups(); }
   render();
   Cloud.init(async (what) => {
     if (what === 'reload') { await loadAll(); render(); }
-    else if (what === 'data') softRender();
+    else if (what === 'data') { softRender(); if (Cloud.loaded.classes && !isParent()) { ensureGroups(); cleanupMoments(); } }
     else render();
   });
   if ('serviceWorker' in navigator && location.protocol.startsWith('http') && !window.Android) navigator.serviceWorker.register('sw.js').catch(() => {});

@@ -59,18 +59,19 @@ function parentNotify(kind, cid, before, after) {
     after.forEach((r) => { const o = before.find((x) => x.id === r.id); if (o && o.status !== r.status && r.status !== 'cancelled') sysNotify(`${REQUEST_TYPES[r.type]?.icon || ''} ${REQ_STATUS[r.status][0]}`, `${REQUEST_TYPES[r.type]?.label || ''}${r.reply ? ': ' + r.reply : ''}`); });
   } else if (kind === 'family') {
     const name = after.name || '';
+    if (after.urgent && after.urgent.t && (!before.urgent || before.urgent.t !== after.urgent.t)) sysNotify(`🚨 عاجل من الحضانة بخصوص ${name}`, after.urgent.m || 'برجاء التواصل مع الحضانة فورًا');
     const bn = (before.notes || []).length, an = (after.notes || []).length;
     if (an > bn || ((after.notes || [])[0] && JSON.stringify((after.notes || [])[0]) !== JSON.stringify((before.notes || [])[0]))) {
       const n = after.notes[0]; sysNotify(`📝 ملاحظة عن ${name}`, n.t);
     }
     const d = today(), a0 = (before.att || {})[d], a1 = (after.att || {})[d];
-    if (a1 && (!a0 || a0.s !== a1.s)) sysNotify(`${a1.s === 'absent' ? '❌' : '✅'} ${name}`, a1.s === 'absent' ? 'متسجل غياب النهارده' : `وصل الحضانة${a1.i ? ' الساعة ' + a1.i : ''}`);
+    if (a1 && (!a0 || a0.s !== a1.s)) sysNotify(`${a1.s === 'absent' ? '❌' : '✅'} ${name}`, a1.s === 'absent' ? 'متسجل غياب النهارده' : `وصل الحضانة${a1.i ? ' الساعة ' + timeLabel(a1.i) : ''}`);
     (after.awards || []).filter((a) => !(before.awards || []).some((b) => b.id === a.id)).forEach((a) => sysNotify(`🏆 ${name} خد شهادة: ${a.title}`, certReason(a, after.gender)));
     const e0 = (before.evals || [])[0], e1 = (after.evals || [])[0];
     if (e1 && (!e0 || e0.month !== e1.month)) sysNotify(`📊 تقييم ${name} لشهر ${monthLabel(e1.month)} وصل`, e1.comment || 'افتح التطبيق وشوف التقييم');
     const r0 = (before.reports || {})[d], r1 = (after.reports || {})[d];
     if (r1 && !r0) sysNotify(`📋 تقرير ${name} النهارده وصل`, reportText({ ...r1, date: d }, name).split('\n').slice(1, 4).join(' · '));
-    if (a1 && a1.o && (!a0 || !a0.o)) sysNotify(`🚪 ${name}`, `خرج من الحضانة الساعة ${a1.o}`);
+    if (a1 && a1.o && (!a0 || !a0.o)) sysNotify(`🚪 ${name}`, `خرج من الحضانة الساعة ${timeLabel(a1.o)}`);
     const fb = famBalance(before), fa = famBalance(after);
     if (fa && fb && fa.payments > fb.payments) sysNotify('💵 تم استلام دفعة', `شكرًا لحضرتك — ${name}`);
   }
@@ -147,16 +148,17 @@ function viewPHome() {
   const di = DAY_INDEX[new Date().getDay()];
   const sch = (k.classId && D.schedule.find((x) => x.id === k.classId && x.slots && x.slots.length)) || D.schedule.find((x) => x.id === 'general');
   const reqs = (Cloud.req[k.id] || []).filter((r) => r.status === 'pending').length;
-  return `${kidSwitcher()}${iosBanner()}${subStatusLine(k)}
+  return `${kidSwitcher()}${iosBanner()}${subStatusLine(k)}${parentUrgentCard(k)}
   <div class="card kid-card"><div class="profile-head">${avatar(k, true)}<div>
-    <h2>${esc(k.name)}</h2><div class="sub">${[k.className && k.className !== 'بدون فصل' ? esc(k.className) : '', k.birthDate ? age(k.birthDate) : ''].filter(Boolean).join(' · ')}</div>
-    <div style="margin-top:6px">${a ? (a.s === 'absent' ? `<span class="badge red">❌ غائب النهارده${a.e ? ' (بإذن)' : ''}</span>` : `<span class="badge green">✅ في الحضانة${a.i ? ' من ' + a.i : ''}</span>${a.o ? ` <span class="badge blue">🚪 خرج ${a.o}</span>` : ''}`) : '<span class="badge gray">لسه ما اتسجلش حضور النهارده</span>'}</div>
+    <h2>${esc(k.name)}</h2><div class="sub">${[k.className && k.className !== 'بدون جروب' ? esc(k.className) : '', k.birthDate ? age(k.birthDate) : ''].filter(Boolean).join(' · ')}</div>
+    <div style="margin-top:6px">${a ? (a.s === 'absent' ? `<span class="badge red">❌ غائب النهارده${a.e ? ' (بإذن)' : ''}</span>` : `<span class="badge green">✅ في الحضانة${a.i ? ' من ' + timeLabel(a.i) : ''}</span>${a.o ? ` <span class="badge blue">🚪 خرج ${timeLabel(a.o)}</span>` : ''}`) : '<span class="badge gray">لسه ما اتسجلش حضور النهارده</span>'}</div>
   </div></div></div>
   ${fb && fb.balance > 0 ? `<div class="card due-card">${new Date().getDate() <= 10 && fb.thisRemaining ? `<div class="month-hello">🌸 أهلاً بشهر ${new Date().toLocaleDateString('ar-EG', { month: 'long' })}</div>` : ''}
     <b>💵 مستحق على ${esc(k.name)}: ${money(fb.balance)}</b>
     ${instaCard(k.name, fb.balance)}${s.payInfo ? `<div class="sub" style="white-space:pre-wrap;margin-top:6px">${esc(s.payInfo)}</div>` : ''}</div>` : ''}
   ${(k.awards || [])[0] && (k.awards[0].date >= addDaysStr(-7)) ? `<div class="card award-card clickable" data-action="pCert" data-id="${k.awards[0].id}"><span class="aw-ico">${k.awards[0].icon}</span><div><b>${esc(k.name)} خد شهادة «${esc(k.awards[0].title)}» 🎉</b><div class="sub">${esc(certReason(k.awards[0], k.gender))} — اضغط تشوف الشهادة</div></div></div>` : ''}
   ${(k.evals || [])[0] && k.evals[0].month >= addMonths(thisMonth(), -1) ? `<div class="card">${evalCardHTML(k.evals[0], k.name)}</div>` : ''}
+  ${parentMomentsSection(k)}
   ${(k.reports || {})[t] ? `<div class="card rep-view"><h3>📋 تقرير ${esc(k.name)} النهارده</h3>${repViewHTML((k.reports || {})[t])}</div>` : ''}
   <div class="quick">
     <button data-action="newReq" data-type="absence"><span>🏠</span>طلب غياب</button>
@@ -196,7 +198,7 @@ function viewPAtt() {
   for (let i = 0; i < offset; i++) cells.push('<div></div>');
   for (let d = 1; d <= days; d++) {
     const ds = `${m}-${pad(d)}`, a = att[ds], fri = new Date(y, mo - 1, d).getDay() === 5;
-    cells.push(`<div class="cal-day ${a ? a.s : fri ? 'off' : ''} ${ds === today() ? 'today' : ''}" title="${a && a.i ? 'دخول ' + a.i : ''}">${num(d)}${a && a.e ? '<i>إذن</i>' : ''}</div>`);
+    cells.push(`<div class="cal-day ${a ? a.s : fri ? 'off' : ''} ${ds === today() ? 'today' : ''}" title="${a && a.i ? 'دخول ' + timeLabel(a.i) : ''}">${num(d)}${a && a.e ? '<i>إذن</i>' : ''}</div>`);
   }
   const vals = Object.entries(att).filter(([d]) => d.startsWith(m)).map(([, v]) => v);
   return `${kidSwitcher()}${monthPicker()}
@@ -208,7 +210,7 @@ function viewPAtt() {
   <div class="card"><div class="cal">${['سبت', 'أحد', 'اتنين', 'تلات', 'أربع', 'خميس', 'جمعة'].map((d) => `<div class="cal-h">${d}</div>`).join('')}${cells.join('')}</div>
     <div class="legend"><span><i style="background:var(--green)"></i>حاضر</span><span><i style="background:var(--orange)"></i>متأخر</span><span><i style="background:var(--red)"></i>غائب</span></div></div>
   <div class="list">${Object.entries(att).filter(([d]) => d.startsWith(m)).sort((a, b) => b[0].localeCompare(a[0])).map(([d, v]) => `<div class="item"><div class="main"><div class="title">${dateLabel(d)}</div>
-    <div class="sub">${v.i ? 'دخول ' + v.i : ''}${v.o ? ' · خروج ' + v.o : ''}${v.e ? ' · ' + esc(v.e) : ''}</div>${(k.reports || {})[d] ? repViewHTML(k.reports[d], true) : ''}</div><span class="badge ${{ present: 'green', late: 'orange', absent: 'red' }[v.s]}">${ATT_LABEL[v.s]}</span></div>`).join('') || '<div class="empty">مفيش حضور متسجل في الشهر ده</div>'}</div>`;
+    <div class="sub">${v.i ? 'دخول ' + timeLabel(v.i) : ''}${v.o ? ' · خروج ' + timeLabel(v.o) : ''}${v.e ? ' · ' + esc(v.e) : ''}</div>${(k.reports || {})[d] ? repViewHTML(k.reports[d], true) : ''}</div><span class="badge ${{ present: 'green', late: 'orange', absent: 'red' }[v.s]}">${ATT_LABEL[v.s]}</span></div>`).join('') || '<div class="empty">مفيش حضور متسجل في الشهر ده</div>'}</div>`;
 }
 
 function viewPReq() {
@@ -449,7 +451,7 @@ function parentSection(c) {
 Object.assign(globalThis, { PARENT_VIEWS: { pHw: (...a) => viewPHw(...a), pHome: viewPHome, pAtt: viewPAtt, pReq: viewPReq, pFees: viewPFees, pMore: viewPMore } });
 
 function repViewHTML(r, compact) {
-  const items = Object.keys(REPORT_FIELDS).filter((f) => r[f]).map((f) => `<span class="rep-chip">${REPORT_FIELDS[f].icon} ${REPORT_FIELDS[f].label}: <b>${esc(optLabel(f, r[f]))}</b></span>`);
+  const items = Object.keys(REPORT_FIELDS).filter((f) => r[f] && optLabel(f, r[f])).map((f) => `<span class="rep-chip">${REPORT_FIELDS[f].icon} ${REPORT_FIELDS[f].label}: <b>${esc(optLabel(f, r[f]))}</b></span>`);
   return `<div class="rep-chips${compact ? ' compact' : ''}">${items.join('')}</div>${r.activity ? `<div class="sub">🎨 ${esc(r.activity)}</div>` : ''}${r.note ? `<div class="sub">📝 ${esc(r.note)}</div>` : ''}`;
 }
 
